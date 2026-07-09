@@ -45,9 +45,13 @@ func run() error {
 
 	hub := lanyard.NewHub(store)
 
-	trmnlClient := trmnl.NewClient(cfg.TRMNLWebhookURL)
-	trmnlRateLimit := trmnl.NewRateLimiter(trmnlRateLimitInterval)
-	trmnlHandlers := trmnl.NewHandlers(trmnlClient, trmnlRateLimit, cfg.DataDir, cfg.PublicBaseURL)
+	trmnlTextClient := trmnl.NewClient(cfg.TRMNLTextWebhookURL)
+	trmnlImageClient := trmnl.NewClient(cfg.TRMNLImageWebhookURL)
+	trmnlHandlers := trmnl.NewHandlers(
+		trmnlTextClient, trmnl.NewRateLimiter(trmnlRateLimitInterval),
+		trmnlImageClient, trmnl.NewRateLimiter(trmnlRateLimitInterval),
+		cfg.DataDir, cfg.PublicBaseURL,
+	)
 
 	imagesDir := filepath.Join(cfg.DataDir, "images")
 	if err := os.MkdirAll(imagesDir, 0o755); err != nil {

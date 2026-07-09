@@ -21,34 +21,42 @@ var allowedImageTypes = map[string]string{
 	"image/webp": ".webp",
 }
 
+// endpoint pairs a TRMNL webhook client with its own independent rate
+// limiter, since text and image pushes go to separate TRMNL private
+// plugins (each with its own webhook UUID and quota).
+type endpoint struct {
+	client      *Client
+	rateLimiter *RateLimiter
+}
+
 type Handlers struct {
-	client        *Client
-	rateLimiter   *RateLimiter
+	text          *endpoint
+	image         *endpoint
 	dataDir       string
 	publicBaseURL string
 }
 
-func NewHandlers(client *Client, rateLimiter *RateLimiter, dataDir, publicBaseURL string) *Handlers {
+func NewHandlers(textClient *Client, textRateLimiter *RateLimiter, imageClient *Client, imageRateLimiter *RateLimiter, dataDir, publicBaseURL string) *Handlers {
 	return &Handlers{
-		client:        client,
-		rateLimiter:   rateLimiter,
+		text:          &endpoint{client: textClient, rateLimiter: textRateLimiter},
+		image:         &endpoint{client: imageClient, rateLimiter: imageRateLimiter},
 		dataDir:       dataDir,
 		publicBaseURL: strings.TrimRight(publicBaseURL, "/"),
 	}
 }
 
-// pushOrRateLimit checks the shared rate limit and, only if it's not
+// pushOrRateLimit checks the endpoint's rate limit and, only if it's not
 // exceeded, performs the actual TRMNL webhook push. Validation of the
 // request body must happen before calling this, so a malformed request
-// never consumes the shared quota.
-func (h *Handlers) pushOrRateLimit(w http.ResponseWriter, r *http.Request, vars map[string]any) {
-	if ok, retryAfter := h.rateLimiter.Allow(); !ok {
+// never consumes the quota.
+func pushOrRateLimit(w http.ResponseWriter, r *http.Request, ep *endpoint, vars map[string]any) {
+	if ok, retryAfter := ep.rateLimiter.Allow(); !ok {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
 		http.Error(w, "rate limit exceeded, try again later", http.StatusTooManyRequests)
 		return
 	}
 
-	if err := h.client.PushMergeVariables(r.Context(), vars); err != nil {
+	if err := ep.client.PushMergeVariables(r.Context(), vars); err != nil {
 		http.Error(w, fmt.Sprintf("failed to push to trmnl: %v", err), http.StatusBadGateway)
 		return
 	}
@@ -76,7 +84,7 @@ func (h *Handlers) PushText(w http.ResponseWriter, r *http.Request) {
 		vars["author"] = req.Author
 	}
 
-	h.pushOrRateLimit(w, r, vars)
+	pushOrRateLimit(w, r, h.text, vars)
 }
 
 type imageURLRequest struct {
@@ -113,7 +121,7 @@ func (h *Handlers) PushImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.pushOrRateLimit(w, r, map[string]any{"image_url": imageURL})
+	pushOrRateLimit(w, r, h.image, map[string]any{"image_url": imageURL})
 }
 
 func (h *Handlers) storeUploadedImage(w http.ResponseWriter, r *http.Request) (string, error) {

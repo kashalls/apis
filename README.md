@@ -9,10 +9,10 @@ Self-hosted Go API with two capabilities:
 
 **Discord status.** A bot account joins a server you're also in and, with the Presence and Server Members privileged intents enabled, receives real-time presence updates from Discord's Gateway for your user ID. Juno caches your latest presence in memory and serves it over REST and a Lanyard-shaped WebSocket protocol.
 
-**TRMNL.** TRMNL's private-plugin webhook only accepts a JSON body of `merge_variables`, rendered through a template you configure once in the TRMNL dashboard — it does not accept raw image bytes. So:
-- `POST /api/trmnl/text` sends `{text, author}` as merge variables.
-- `POST /api/trmnl/image` accepts either a `multipart/form-data` upload (juno stores it and serves it back at a URL under `/images/`) or a JSON `{"image_url": "..."}` if you already have a publicly reachable image URL. Either way, the resulting URL is sent as the `image_url` merge variable for your plugin template to render (e.g. `<img src="{{ image_url }}">`).
-- Both endpoints share a single rate limit of 1 request per 5 minutes, since they draw from the same TRMNL account webhook quota.
+**TRMNL.** TRMNL's private-plugin webhook only accepts a JSON body of `merge_variables`, rendered through a template you configure once in the TRMNL dashboard — it does not accept raw image bytes. Juno uses two separate private plugins (and webhooks), one per content type, so each gets its own independent TRMNL rate limit instead of sharing one pool:
+- `POST /api/trmnl/text` sends `{text, author}` as merge variables to `TRMNL_TEXT_WEBHOOK_URL`.
+- `POST /api/trmnl/image` accepts either a `multipart/form-data` upload (juno stores it and serves it back at a URL under `/images/`) or a JSON `{"image_url": "..."}` if you already have a publicly reachable image URL. Either way, the resulting URL is sent as the `image_url` merge variable to `TRMNL_IMAGE_WEBHOOK_URL` for your plugin template to render (e.g. `<img src="{{ image_url }}">`).
+- Each endpoint is independently rate limited to 1 request per 5 minutes by Juno itself, on top of whatever TRMNL's own per-plugin webhook limit is (12x/hour standard, 30x/hour on TRMNL+).
 
 ## One-time setup
 
@@ -24,11 +24,13 @@ Self-hosted Go API with two capabilities:
 4. Copy the bot token into `DISCORD_BOT_TOKEN`.
 5. Enable Developer Mode in Discord, right-click your own name, and copy your user ID into `DISCORD_USER_ID`.
 
-### TRMNL private plugin
+### TRMNL private plugins
 
-1. In the TRMNL dashboard, create a new **Private Plugin**.
-2. Design its template (Native or HTML) to render the merge variables you'll send — for text: `{{ text }}` / `{{ author }}`; for images: `<img src="{{ image_url }}">`.
-3. Copy the plugin's **Webhook URL** (looks like `https://usetrmnl.com/api/custom_plugins/<uuid>`) into `TRMNL_WEBHOOK_URL`.
+Create **two** private plugins in the TRMNL dashboard, so text and image pushes each get their own webhook and rate-limit quota:
+
+1. **Text plugin**: create a Private Plugin, design its template to render `{{ text }}` / `{{ author }}`, then copy its **Webhook URL** (looks like `https://usetrmnl.com/api/custom_plugins/<uuid>`) into `TRMNL_TEXT_WEBHOOK_URL`.
+2. **Image plugin**: create a second Private Plugin, design its template as `<img src="{{ image_url }}">`, then copy its Webhook URL into `TRMNL_IMAGE_WEBHOOK_URL`.
+3. Add each plugin to whichever playlist/device you want it to show up on.
 
 ## Configuration
 
@@ -39,7 +41,8 @@ PORT=8080
 DISCORD_BOT_TOKEN=
 DISCORD_USER_ID=
 DISCORD_GUILD_ID=
-TRMNL_WEBHOOK_URL=
+TRMNL_TEXT_WEBHOOK_URL=
+TRMNL_IMAGE_WEBHOOK_URL=
 PUBLIC_BASE_URL=
 DATA_DIR=/data
 ```
