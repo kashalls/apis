@@ -1,4 +1,5 @@
-FROM golang:1.26-alpine AS builder
+# syntax=docker/dockerfile:1
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 WORKDIR /src
 
@@ -6,7 +7,11 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/juno ./cmd/juno
+# Go cross-compiles natively, so the build runs on the host arch even when
+# targeting a different one - no QEMU emulation needed for this step.
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/juno ./cmd/juno
 
 FROM alpine:3.24
 
