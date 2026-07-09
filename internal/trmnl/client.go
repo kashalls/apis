@@ -6,23 +6,19 @@
 package trmnl
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/kashalls/juno/internal/httpclient"
 )
 
 type Client struct {
-	webhookURL string
-	httpClient *http.Client
+	http *httpclient.Client
 }
 
 func NewClient(webhookURL string) *Client {
-	return &Client{
-		webhookURL: webhookURL,
-		httpClient: &http.Client{},
-	}
+	return &Client{http: httpclient.New(webhookURL)}
 }
 
 type webhookPayload struct {
@@ -30,25 +26,8 @@ type webhookPayload struct {
 }
 
 func (c *Client) PushMergeVariables(ctx context.Context, vars map[string]any) error {
-	body, err := json.Marshal(webhookPayload{MergeVariables: vars})
-	if err != nil {
-		return fmt.Errorf("marshal webhook payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.webhookURL, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("build webhook request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("send webhook request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("trmnl webhook returned status %d", resp.StatusCode)
+	if err := c.http.Do(ctx, http.MethodPost, "", webhookPayload{MergeVariables: vars}, nil); err != nil {
+		return fmt.Errorf("push trmnl webhook: %w", err)
 	}
 	return nil
 }

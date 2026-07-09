@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/kashalls/juno/internal/ratelimit"
 )
 
 const maxImageBytes = 2 << 20 // 2MB
@@ -26,7 +28,7 @@ var allowedImageTypes = map[string]string{
 // plugins (each with its own webhook UUID and quota).
 type endpoint struct {
 	client      *Client
-	rateLimiter *RateLimiter
+	rateLimiter *ratelimit.Limiter
 }
 
 type Handlers struct {
@@ -36,7 +38,7 @@ type Handlers struct {
 	publicBaseURL string
 }
 
-func NewHandlers(textClient *Client, textRateLimiter *RateLimiter, imageClient *Client, imageRateLimiter *RateLimiter, dataDir, publicBaseURL string) *Handlers {
+func NewHandlers(textClient *Client, textRateLimiter *ratelimit.Limiter, imageClient *Client, imageRateLimiter *ratelimit.Limiter, dataDir, publicBaseURL string) *Handlers {
 	return &Handlers{
 		text:          &endpoint{client: textClient, rateLimiter: textRateLimiter},
 		image:         &endpoint{client: imageClient, rateLimiter: imageRateLimiter},

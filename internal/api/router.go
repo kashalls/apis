@@ -8,16 +8,18 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/kashalls/juno/internal/discord"
+	"github.com/kashalls/juno/internal/homeassistant"
 	"github.com/kashalls/juno/internal/lanyard"
 	"github.com/kashalls/juno/internal/trmnl"
 )
 
 type RouterConfig struct {
-	Store         *discord.Store
-	DiscordUserID string
-	Hub           *lanyard.Hub
-	TRMNLHandlers *trmnl.Handlers
-	ImagesDir     string
+	Store                 *discord.Store
+	DiscordUserID         string
+	Hub                   *lanyard.Hub
+	TRMNLHandlers         *trmnl.Handlers
+	HomeAssistantHandlers *homeassistant.Handlers
+	ImagesDir             string
 }
 
 func NewRouter(cfg RouterConfig) http.Handler {
@@ -38,6 +40,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 		tr.Post("/text", cfg.TRMNLHandlers.PushText)
 		tr.Post("/image", cfg.TRMNLHandlers.PushImage)
 	})
+
+	r.Post("/api/lights/color", cfg.HomeAssistantHandlers.SetColor)
 
 	fileServer := http.FileServer(http.Dir(cfg.ImagesDir))
 	r.Handle("/images/*", http.StripPrefix("/images/", fileServer))
