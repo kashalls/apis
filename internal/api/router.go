@@ -55,7 +55,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 }
 
 // skipHealthzLogger applies middleware.Logger to every request except
-// /healthz, keeping access logs free of health-check noise.
+// /healthz, keeping access logs free of health-check noise while still
+// logging unmatched routes (404s/405s), which per-route middleware would miss.
 func skipHealthzLogger(next http.Handler) http.Handler {
 	logged := middleware.Logger(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
