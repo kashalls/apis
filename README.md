@@ -45,9 +45,12 @@ TRMNL_TEXT_WEBHOOK_URL=
 TRMNL_IMAGE_WEBHOOK_URL=
 PUBLIC_BASE_URL=
 DATA_DIR=/data
+TRUSTED_PROXY_CIDRS=
 ```
 
 `PUBLIC_BASE_URL` is only required if you plan to use the image-upload path of `/api/trmnl/image`; it's used to build the URL your uploaded image is served back at.
+
+`TRUSTED_PROXY_CIDRS` is a comma-separated list of CIDRs for reverse proxies you trust to set `X-Forwarded-For` (e.g. `10.0.0.0/8`). Leave blank if Juno is reachable directly, with no reverse proxy in front.
 
 ## Running
 

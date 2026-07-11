@@ -81,6 +81,7 @@ func run() error {
 		TRMNLHandlers:         trmnlHandlers,
 		HomeAssistantHandlers: homeAssistantHandlers,
 		ImagesDir:             imagesDir,
+		TrustedProxyCIDRs:     cfg.TrustedProxyCIDRs,
 	})
 
 	srv := &http.Server{

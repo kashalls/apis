@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 type Config struct {
@@ -18,6 +19,7 @@ type Config struct {
 	HomeAssistantBaseURL    string
 	HomeAssistantToken      string
 	HomeAssistantLightGroup string
+	TrustedProxyCIDRs       []string
 }
 
 func Load() (*Config, error) {
@@ -33,6 +35,7 @@ func Load() (*Config, error) {
 		HomeAssistantBaseURL:    os.Getenv("HOME_ASSISTANT_BASE_URL"),
 		HomeAssistantToken:      os.Getenv("HOME_ASSISTANT_TOKEN"),
 		HomeAssistantLightGroup: os.Getenv("HOME_ASSISTANT_LIGHT_GROUP"),
+		TrustedProxyCIDRs:       parseCIDRList(os.Getenv("TRUSTED_PROXY_CIDRS")),
 	}
 
 	var missing []string
@@ -54,4 +57,14 @@ func getEnvDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func parseCIDRList(v string) []string {
+	var cidrs []string
+	for _, c := range strings.Split(v, ",") {
+		if c = strings.TrimSpace(c); c != "" {
+			cidrs = append(cidrs, c)
+		}
+	}
+	return cidrs
 }
