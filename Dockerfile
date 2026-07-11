@@ -15,6 +15,11 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=
 
 FROM alpine:3.24
 
+# Alpine's repo only keeps the latest revision of each package per release
+# branch, so pinning exact apk versions here would go stale and break the
+# build whenever Alpine ships an update - unlike Debian/Ubuntu, old versions
+# aren't kept around to pin against.
+# hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates wget && \
     addgroup -S juno && adduser -S juno -G juno
 
