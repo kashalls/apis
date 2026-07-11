@@ -13,21 +13,15 @@ import (
 	"github.com/kashalls/juno/internal/trmnl"
 )
 
-type RouterConfig struct {
-	Store                 *discord.Store
-	DiscordUserID         string
-	Hub                   *lanyard.Hub
-	TRMNLHandlers         *trmnl.Handlers
-	HomeAssistantHandlers *homeassistant.Handlers
-	ImagesDir             string
-	TrustedProxyCIDRs     []string
-}
-
-func NewRouter(cfg RouterConfig) http.Handler {
+// newBaseRouter sets up the middleware chain shared by every Juno binary:
+// request IDs, client IP resolution, access logging (skipping /healthz
+// noise), panic recovery, and a request timeout. Callers add their own
+// routes on top.
+func newBaseRouter(trustedProxyCIDRs []string) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	if len(cfg.TrustedProxyCIDRs) > 0 {
-		r.Use(middleware.ClientIPFromXFF(cfg.TrustedProxyCIDRs...))
+	if len(trustedProxyCIDRs) > 0 {
+		r.Use(middleware.ClientIPFromXFF(trustedProxyCIDRs...))
 	} else {
 		r.Use(middleware.ClientIPFromRemoteAddr)
 	}
@@ -37,19 +31,61 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	r.Get("/healthz", healthHandler)
 
+	return r
+}
+
+type JunoRouterConfig struct {
+	Store             *discord.Store
+	DiscordUserID     string
+	Hub               *lanyard.Hub
+	TrustedProxyCIDRs []string
+}
+
+// NewJunoRouter serves the Discord/Lanyard presence API: GET /v1/users/{id}
+// and the Lanyard-protocol WebSocket at /socket.
+func NewJunoRouter(cfg JunoRouterConfig) http.Handler {
+	r := newBaseRouter(cfg.TrustedProxyCIDRs)
+
 	d := &discordAPI{store: cfg.Store, userID: cfg.DiscordUserID}
 	r.Get("/v1/users/{id}", d.getUser)
 	r.Get("/socket", cfg.Hub.ServeWS)
 
-	r.Route("/api/trmnl", func(tr chi.Router) {
-		tr.Post("/text", cfg.TRMNLHandlers.PushText)
-		tr.Post("/image", cfg.TRMNLHandlers.PushImage)
-	})
+	return r
+}
 
-	r.Post("/api/lights/color", cfg.HomeAssistantHandlers.SetColor)
+type TRMNLRouterConfig struct {
+	Handlers          *trmnl.Handlers
+	ImagesDir         string
+	TrustedProxyCIDRs []string
+}
+
+// NewTRMNLRouter serves the TRMNL push API under /api/trmnl and the
+// uploaded-image file server at /images.
+func NewTRMNLRouter(cfg TRMNLRouterConfig) http.Handler {
+	r := newBaseRouter(cfg.TrustedProxyCIDRs)
+
+	r.Route("/api/trmnl", func(tr chi.Router) {
+		tr.Post("/text", cfg.Handlers.PushText)
+		tr.Post("/image", cfg.Handlers.PushImage)
+	})
 
 	fileServer := http.FileServer(http.Dir(cfg.ImagesDir))
 	r.Handle("/images/*", http.StripPrefix("/images/", fileServer))
+
+	return r
+}
+
+type HomeAssistantRouterConfig struct {
+	Handlers          *homeassistant.Handlers
+	TrustedProxyCIDRs []string
+}
+
+// NewHomeAssistantRouter serves the Home Assistant light API under
+// /api/lights.
+func NewHomeAssistantRouter(cfg HomeAssistantRouterConfig) http.Handler {
+	r := newBaseRouter(cfg.TrustedProxyCIDRs)
+
+	r.Post("/api/lights/color", cfg.Handlers.SetColor)
 
 	return r
 }

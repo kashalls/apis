@@ -6,13 +6,19 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/kashalls/juno/internal/api"
 	"github.com/kashalls/juno/internal/config"
-	"github.com/kashalls/juno/internal/discord"
-	"github.com/kashalls/juno/internal/lanyard"
+	"github.com/kashalls/juno/internal/ratelimit"
+	"github.com/kashalls/juno/internal/trmnl"
+)
+
+const (
+	rateLimitInterval  = 5 * time.Minute
+	imageSweepInterval = 10 * time.Minute
 )
 
 func main() {
@@ -23,7 +29,7 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.LoadJuno()
+	cfg, err := config.LoadTRMNL()
 	if err != nil {
 		return err
 	}
@@ -31,23 +37,23 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	store := discord.NewStore()
+	textClient := trmnl.NewClient(cfg.TRMNLTextWebhookURL)
+	imageClient := trmnl.NewClient(cfg.TRMNLImageWebhookURL)
+	handlers := trmnl.NewHandlers(
+		textClient, ratelimit.NewLimiter(rateLimitInterval),
+		imageClient, ratelimit.NewLimiter(rateLimitInterval),
+		cfg.DataDir, cfg.PublicBaseURL,
+	)
 
-	discordClient, err := discord.NewClient(cfg.DiscordBotToken, cfg.DiscordUserID, cfg.DiscordGuildID, store)
-	if err != nil {
+	imagesDir := filepath.Join(cfg.DataDir, "images")
+	if err := os.MkdirAll(imagesDir, 0o755); err != nil {
 		return err
 	}
-	if err := discordClient.Open(); err != nil {
-		return err
-	}
-	defer discordClient.Close()
+	trmnl.StartImageSweeper(ctx, imagesDir, imageSweepInterval)
 
-	hub := lanyard.NewHub(store)
-
-	router := api.NewJunoRouter(api.JunoRouterConfig{
-		Store:             store,
-		DiscordUserID:     cfg.DiscordUserID,
-		Hub:               hub,
+	router := api.NewTRMNLRouter(api.TRMNLRouterConfig{
+		Handlers:          handlers,
+		ImagesDir:         imagesDir,
 		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
 	})
 

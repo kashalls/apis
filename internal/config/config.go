@@ -1,4 +1,7 @@
-// Package config loads Juno's runtime configuration from environment variables.
+// Package config loads each binary's runtime configuration from
+// environment variables. Juno, TRMNL, and Home Assistant each run as their
+// own binary/container and only load the subset of variables relevant to
+// them.
 package config
 
 import (
@@ -7,35 +10,22 @@ import (
 	"strings"
 )
 
-type Config struct {
-	Port                    string
-	DiscordBotToken         string
-	DiscordUserID           string
-	DiscordGuildID          string
-	TRMNLTextWebhookURL     string
-	TRMNLImageWebhookURL    string
-	PublicBaseURL           string
-	DataDir                 string
-	HomeAssistantBaseURL    string
-	HomeAssistantToken      string
-	HomeAssistantLightGroup string
-	TrustedProxyCIDRs       []string
+// JunoConfig configures the Discord/Lanyard presence server (cmd/juno).
+type JunoConfig struct {
+	Port              string
+	DiscordBotToken   string
+	DiscordUserID     string
+	DiscordGuildID    string
+	TrustedProxyCIDRs []string
 }
 
-func Load() (*Config, error) {
-	cfg := &Config{
-		Port:                    getEnvDefault("PORT", "8080"),
-		DiscordBotToken:         os.Getenv("DISCORD_BOT_TOKEN"),
-		DiscordUserID:           os.Getenv("DISCORD_USER_ID"),
-		DiscordGuildID:          os.Getenv("DISCORD_GUILD_ID"),
-		TRMNLTextWebhookURL:     os.Getenv("TRMNL_TEXT_WEBHOOK_URL"),
-		TRMNLImageWebhookURL:    os.Getenv("TRMNL_IMAGE_WEBHOOK_URL"),
-		PublicBaseURL:           os.Getenv("PUBLIC_BASE_URL"),
-		DataDir:                 getEnvDefault("DATA_DIR", "/data"),
-		HomeAssistantBaseURL:    os.Getenv("HOME_ASSISTANT_BASE_URL"),
-		HomeAssistantToken:      os.Getenv("HOME_ASSISTANT_TOKEN"),
-		HomeAssistantLightGroup: os.Getenv("HOME_ASSISTANT_LIGHT_GROUP"),
-		TrustedProxyCIDRs:       parseCIDRList(os.Getenv("TRUSTED_PROXY_CIDRS")),
+func LoadJuno() (*JunoConfig, error) {
+	cfg := &JunoConfig{
+		Port:              getEnvDefault("PORT", "8080"),
+		DiscordBotToken:   os.Getenv("DISCORD_BOT_TOKEN"),
+		DiscordUserID:     os.Getenv("DISCORD_USER_ID"),
+		DiscordGuildID:    os.Getenv("DISCORD_GUILD_ID"),
+		TrustedProxyCIDRs: parseCIDRList(os.Getenv("TRUSTED_PROXY_CIDRS")),
 	}
 
 	var missing []string
@@ -44,6 +34,76 @@ func Load() (*Config, error) {
 	}
 	if cfg.DiscordUserID == "" {
 		missing = append(missing, "DISCORD_USER_ID")
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("missing required environment variables: %v", missing)
+	}
+
+	return cfg, nil
+}
+
+// TRMNLConfig configures the TRMNL push server (cmd/trmnl).
+type TRMNLConfig struct {
+	Port                 string
+	TRMNLTextWebhookURL  string
+	TRMNLImageWebhookURL string
+	PublicBaseURL        string
+	DataDir              string
+	TrustedProxyCIDRs    []string
+}
+
+func LoadTRMNL() (*TRMNLConfig, error) {
+	cfg := &TRMNLConfig{
+		Port:                 getEnvDefault("PORT", "8080"),
+		TRMNLTextWebhookURL:  os.Getenv("TRMNL_TEXT_WEBHOOK_URL"),
+		TRMNLImageWebhookURL: os.Getenv("TRMNL_IMAGE_WEBHOOK_URL"),
+		PublicBaseURL:        os.Getenv("PUBLIC_BASE_URL"),
+		DataDir:              getEnvDefault("DATA_DIR", "/data"),
+		TrustedProxyCIDRs:    parseCIDRList(os.Getenv("TRUSTED_PROXY_CIDRS")),
+	}
+
+	var missing []string
+	if cfg.TRMNLTextWebhookURL == "" {
+		missing = append(missing, "TRMNL_TEXT_WEBHOOK_URL")
+	}
+	if cfg.TRMNLImageWebhookURL == "" {
+		missing = append(missing, "TRMNL_IMAGE_WEBHOOK_URL")
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("missing required environment variables: %v", missing)
+	}
+
+	return cfg, nil
+}
+
+// HomeAssistantConfig configures the Home Assistant light server
+// (cmd/homeassistant).
+type HomeAssistantConfig struct {
+	Port                    string
+	HomeAssistantBaseURL    string
+	HomeAssistantToken      string
+	HomeAssistantLightGroup string
+	TrustedProxyCIDRs       []string
+}
+
+func LoadHomeAssistant() (*HomeAssistantConfig, error) {
+	cfg := &HomeAssistantConfig{
+		Port:                    getEnvDefault("PORT", "8080"),
+		HomeAssistantBaseURL:    os.Getenv("HOME_ASSISTANT_BASE_URL"),
+		HomeAssistantToken:      os.Getenv("HOME_ASSISTANT_TOKEN"),
+		HomeAssistantLightGroup: os.Getenv("HOME_ASSISTANT_LIGHT_GROUP"),
+		TrustedProxyCIDRs:       parseCIDRList(os.Getenv("TRUSTED_PROXY_CIDRS")),
+	}
+
+	var missing []string
+	if cfg.HomeAssistantBaseURL == "" {
+		missing = append(missing, "HOME_ASSISTANT_BASE_URL")
+	}
+	if cfg.HomeAssistantToken == "" {
+		missing = append(missing, "HOME_ASSISTANT_TOKEN")
+	}
+	if cfg.HomeAssistantLightGroup == "" {
+		missing = append(missing, "HOME_ASSISTANT_LIGHT_GROUP")
 	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("missing required environment variables: %v", missing)

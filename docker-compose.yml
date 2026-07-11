@@ -1,11 +1,35 @@
 services:
   juno:
-    build: .
+    build:
+      context: .
+      target: juno
     image: juno:latest
     restart: unless-stopped
     ports:
       - "8080:8080"
     env_file:
       - .env
+
+  trmnl:
+    build:
+      context: .
+      target: trmnl
+    image: trmnl:latest
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    env_file:
+      - .env
     volumes:
       - ./data:/data
+
+  homeassistant:
+    build:
+      context: .
+      target: homeassistant
+    image: homeassistant:latest
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
+    env_file:
+      - .env

@@ -11,9 +11,11 @@ import (
 
 	"github.com/kashalls/juno/internal/api"
 	"github.com/kashalls/juno/internal/config"
-	"github.com/kashalls/juno/internal/discord"
-	"github.com/kashalls/juno/internal/lanyard"
+	"github.com/kashalls/juno/internal/homeassistant"
+	"github.com/kashalls/juno/internal/ratelimit"
 )
+
+const rateLimitInterval = 2 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -23,7 +25,7 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.LoadJuno()
+	cfg, err := config.LoadHomeAssistant()
 	if err != nil {
 		return err
 	}
@@ -31,23 +33,11 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	store := discord.NewStore()
+	client := homeassistant.NewClient(cfg.HomeAssistantBaseURL, cfg.HomeAssistantToken)
+	handlers := homeassistant.NewHandlers(client, ratelimit.NewLimiter(rateLimitInterval), cfg.HomeAssistantLightGroup)
 
-	discordClient, err := discord.NewClient(cfg.DiscordBotToken, cfg.DiscordUserID, cfg.DiscordGuildID, store)
-	if err != nil {
-		return err
-	}
-	if err := discordClient.Open(); err != nil {
-		return err
-	}
-	defer discordClient.Close()
-
-	hub := lanyard.NewHub(store)
-
-	router := api.NewJunoRouter(api.JunoRouterConfig{
-		Store:             store,
-		DiscordUserID:     cfg.DiscordUserID,
-		Hub:               hub,
+	router := api.NewHomeAssistantRouter(api.HomeAssistantRouterConfig{
+		Handlers:          handlers,
 		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
 	})
 
