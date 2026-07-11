@@ -31,7 +31,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	} else {
 		r.Use(middleware.ClientIPFromRemoteAddr)
 	}
-	r.Use(middleware.Logger)
+	r.Use(skipHealthzLogger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 
@@ -52,4 +52,18 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	r.Handle("/images/*", http.StripPrefix("/images/", fileServer))
 
 	return r
+}
+
+// skipHealthzLogger applies middleware.Logger to every request except
+// /healthz, keeping access logs free of health-check noise while still
+// logging unmatched routes (404s/405s), which per-route middleware would miss.
+func skipHealthzLogger(next http.Handler) http.Handler {
+	logged := middleware.Logger(next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		logged.ServeHTTP(w, r)
+	})
 }
