@@ -59,12 +59,12 @@ type TRMNLRouterConfig struct {
 	TrustedProxyCIDRs []string
 }
 
-// NewTRMNLRouter serves the TRMNL push API under /api/trmnl and the
+// NewTRMNLRouter serves the TRMNL push API under /api and the
 // uploaded-image file server at /images.
 func NewTRMNLRouter(cfg TRMNLRouterConfig) http.Handler {
 	r := newBaseRouter(cfg.TrustedProxyCIDRs)
 
-	r.Route("/api/trmnl", func(tr chi.Router) {
+	r.Route("/api", func(tr chi.Router) {
 		tr.Post("/text", cfg.Handlers.PushText)
 		tr.Post("/image", cfg.Handlers.PushImage)
 	})
@@ -80,12 +80,11 @@ type HomeAssistantRouterConfig struct {
 	TrustedProxyCIDRs []string
 }
 
-// NewHomeAssistantRouter serves the Home Assistant light API under
-// /api/lights.
+// NewHomeAssistantRouter serves the Home Assistant light API under /api.
 func NewHomeAssistantRouter(cfg HomeAssistantRouterConfig) http.Handler {
 	r := newBaseRouter(cfg.TrustedProxyCIDRs)
 
-	r.Post("/api/lights/color", cfg.Handlers.SetColor)
+	r.Post("/api/color", cfg.Handlers.SetColor)
 
 	return r
 }

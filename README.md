@@ -13,11 +13,11 @@ They're independent processes with independent config, but share the `/api/*` UR
 **juno.** A bot account joins a server you're also in and, with the Presence and Server Members privileged intents enabled, receives real-time presence updates from Discord's Gateway for your user ID. Juno caches your latest presence in memory and serves it over REST and a Lanyard-shaped WebSocket protocol.
 
 **trmnl.** TRMNL's private-plugin webhook only accepts a JSON body of `merge_variables`, rendered through a template you configure once in the TRMNL dashboard — it does not accept raw image bytes. This service uses two separate private plugins (and webhooks), one per content type, so each gets its own independent TRMNL rate limit instead of sharing one pool:
-- `POST /api/trmnl/text` sends `{text, author}` as merge variables to `TRMNL_TEXT_WEBHOOK_URL`.
-- `POST /api/trmnl/image` accepts either a `multipart/form-data` upload (stored and served back at a URL under `/images/`) or a JSON `{"image_url": "..."}` if you already have a publicly reachable image URL. Either way, the resulting URL is sent as the `image_url` merge variable to `TRMNL_IMAGE_WEBHOOK_URL` for your plugin template to render (e.g. `<img src="{{ image_url }}">`).
+- `POST /api/text` sends `{text, author}` as merge variables to `TRMNL_TEXT_WEBHOOK_URL`.
+- `POST /api/image` accepts either a `multipart/form-data` upload (stored and served back at a URL under `/images/`) or a JSON `{"image_url": "..."}` if you already have a publicly reachable image URL. Either way, the resulting URL is sent as the `image_url` merge variable to `TRMNL_IMAGE_WEBHOOK_URL` for your plugin template to render (e.g. `<img src="{{ image_url }}">`).
 - Each endpoint is independently rate limited to 1 request per 5 minutes on top of whatever TRMNL's own per-plugin webhook limit is (12x/hour standard, 30x/hour on TRMNL+).
 
-**homeassistant.** `POST /api/lights/color` sets a light (or light group) entity's color via the Home Assistant REST API, using a long-lived access token. Rate limited to 1 request per 2 seconds.
+**homeassistant.** `POST /api/color` sets a light (or light group) entity's color via the Home Assistant REST API, using a long-lived access token. Rate limited to 1 request per 2 seconds.
 
 ## One-time setup
 
@@ -62,7 +62,7 @@ HOME_ASSISTANT_LIGHT_GROUP=
 TRUSTED_PROXY_CIDRS=
 ```
 
-`PUBLIC_BASE_URL` is only required by trmnl if you plan to use the image-upload path of `/api/trmnl/image`; it's used to build the URL your uploaded image is served back at.
+`PUBLIC_BASE_URL` is only required by trmnl if you plan to use the image-upload path of `/api/image`; it's used to build the URL your uploaded image is served back at.
 
 `TRUSTED_PROXY_CIDRS` is a comma-separated list of CIDRs for reverse proxies you trust to set `X-Forwarded-For` (e.g. `10.0.0.0/8`). Leave blank if a service is reachable directly, with no reverse proxy in front.
 
@@ -121,7 +121,7 @@ WebSocket endpoint using Lanyard's own protocol:
 
 ### trmnl
 
-#### `POST /api/trmnl/text`
+#### `POST /api/text`
 
 ```json
 {"text": "Hello from Juno", "author": "optional"}
@@ -129,7 +129,7 @@ WebSocket endpoint using Lanyard's own protocol:
 
 Returns `202 Accepted` on success, `429` (with `Retry-After`) if rate limited.
 
-#### `POST /api/trmnl/image`
+#### `POST /api/image`
 
 Either:
 
@@ -148,7 +148,7 @@ Returns `202 Accepted` on success, `429` (with `Retry-After`) if rate limited.
 
 ### homeassistant
 
-#### `POST /api/lights/color`
+#### `POST /api/color`
 
 ```json
 {"hex": "#ff8800"}
