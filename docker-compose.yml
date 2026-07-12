@@ -1,15 +1,4 @@
 services:
-  juno:
-    build:
-      context: .
-      target: juno
-    image: juno:latest
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    env_file:
-      - .env
-
   trmnl:
     build:
       context: .

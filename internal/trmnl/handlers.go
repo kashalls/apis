@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kashalls/juno/internal/ratelimit"
+	"github.com/kashalls/apis/internal/ratelimit"
 )
 
 const maxImageBytes = 2 << 20 // 2MB

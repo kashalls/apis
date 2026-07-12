@@ -1,16 +1,15 @@
-# juno
+# apis
 
-Three small self-hosted Go HTTP services, built from one repo and one `Dockerfile`, each shipped as its own binary/container:
+Two small self-hosted Go HTTP services, built from one repo and one `Dockerfile`, each shipped as its own binary/container:
 
-- **juno** - a [Lanyard](https://github.com/Phineas/lanyard)-compatible REST + WebSocket feed of your live Discord status, scoped to a single Discord user.
 - **trmnl** - endpoints to push text or an image to a [TRMNL](https://usetrmnl.com) device via its private-plugin webhook.
 - **homeassistant** - an endpoint to set a Home Assistant light (or light group)'s color.
 
-They're independent processes with independent config, but share the `/api/*` URL convention and the same base image, so you can run any subset of them.
+They're independent processes with independent config, but share the `/api/*` URL convention and the same base image, so you can run either or both.
+
+> The Discord/Lanyard presence service that used to live here has moved to [kashalls/juno](https://github.com/kashalls/juno).
 
 ## How it works
-
-**juno.** A bot account joins a server you're also in and, with the Presence and Server Members privileged intents enabled, receives real-time presence updates from Discord's Gateway for your user ID. Juno caches your latest presence in memory and serves it over REST and a Lanyard-shaped WebSocket protocol.
 
 **trmnl.** TRMNL's private-plugin webhook only accepts a JSON body of `merge_variables`, rendered through a template you configure once in the TRMNL dashboard — it does not accept raw image bytes. This service uses two separate private plugins (and webhooks), one per content type, so each gets its own independent TRMNL rate limit instead of sharing one pool:
 - `POST /api/text` sends `{text, author}` as merge variables to `TRMNL_TEXT_WEBHOOK_URL`.
@@ -20,14 +19,6 @@ They're independent processes with independent config, but share the `/api/*` UR
 **homeassistant.** `POST /api/color` sets a light (or light group) entity's color via the Home Assistant REST API, using a long-lived access token. Rate limited to 1 request per 2 seconds.
 
 ## One-time setup
-
-### Discord bot (juno)
-
-1. Create an application at the [Discord Developer Portal](https://discord.com/developers/applications) and add a Bot user.
-2. Under Bot settings, enable the **Presence Intent** and **Server Members Intent** privileged intents.
-3. Invite the bot to any server you're also a member of (OAuth2 URL Generator, `bot` scope, no permissions needed).
-4. Copy the bot token into `DISCORD_BOT_TOKEN`.
-5. Enable Developer Mode in Discord, right-click your own name, and copy your user ID into `DISCORD_USER_ID`.
 
 ### TRMNL private plugins (trmnl)
 
@@ -45,13 +36,10 @@ Create **two** private plugins in the TRMNL dashboard, so text and image pushes 
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in the values (see comments in that file for details). All three services read from the same `.env` file via `docker-compose.yml`; each only requires the variables it actually uses (see the file's `--- juno ---` / `--- trmnl ---` / `--- homeassistant ---` sections) and ignores the rest.
+Copy `.env.example` to `.env` and fill in the values (see comments in that file for details). Both services read from the same `.env` file via `docker-compose.yml`; each only requires the variables it actually uses (see the file's `--- trmnl ---` / `--- homeassistant ---` sections) and ignores the rest.
 
 ```
 PORT=8080
-DISCORD_BOT_TOKEN=
-DISCORD_USER_ID=
-DISCORD_GUILD_ID=
 TRMNL_TEXT_WEBHOOK_URL=
 TRMNL_IMAGE_WEBHOOK_URL=
 PUBLIC_BASE_URL=
@@ -72,11 +60,10 @@ TRUSTED_PROXY_CIDRS=
 docker compose up --build -d
 ```
 
-This builds all three images from the one `Dockerfile` (each is a separate build `target`), starts the containers, and persists trmnl's uploaded images to `./data`. By default:
+This builds both images from the one `Dockerfile` (each is a separate build `target`), starts the containers, and persists trmnl's uploaded images to `./data`. By default:
 
 | Service        | Host port | Healthcheck                          |
 |----------------|-----------|---------------------------------------|
-| juno           | 8080      | `curl http://localhost:8080/healthz` |
 | trmnl          | 8081      | `curl http://localhost:8081/healthz` |
 | homeassistant  | 8082      | `curl http://localhost:8082/healthz` |
 
@@ -88,43 +75,12 @@ You can also run just one service, e.g. `docker compose up --build -d trmnl`, or
 
 Liveness check, on every service. Returns `{"status":"ok"}`.
 
-### juno
-
-#### `GET /v1/users/{discord_user_id}`
-
-Returns your cached presence if `{discord_user_id}` matches `DISCORD_USER_ID`, otherwise `404`.
-
-```json
-{
-  "success": true,
-  "data": {
-    "discord_user": {"id": "...", "username": "...", "discriminator": "0", "global_name": "...", "avatar": "..."},
-    "discord_status": "online",
-    "activities": [ /* raw Discord activity objects */ ],
-    "listening_to_spotify": false,
-    "spotify": null,
-    "active_on_discord_desktop": true,
-    "active_on_discord_mobile": false,
-    "active_on_discord_web": false
-  }
-}
-```
-
-#### `GET /socket`
-
-WebSocket endpoint using Lanyard's own protocol:
-
-- Server sends `{"op":1,"d":{"heartbeat_interval":30000}}` (Hello) on connect.
-- Client may send `{"op":2,"d":{"subscribe_to_id":"<your id>"}}` (Initialize) — optional, since there's only ever one tracked user.
-- Server sends `{"op":0,"t":"INIT_STATE","d":<presence>}` immediately after connecting, then `{"op":0,"t":"PRESENCE_UPDATE","d":<presence>}` on every subsequent change.
-- Client should send `{"op":3}` (Heartbeat) periodically to keep the connection alive.
-
 ### trmnl
 
 #### `POST /api/text`
 
 ```json
-{"text": "Hello from Juno", "author": "optional"}
+{"text": "Hello world", "author": "optional"}
 ```
 
 Returns `202 Accepted` on success, `429` (with `Retry-After`) if rate limited.

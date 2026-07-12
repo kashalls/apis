@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/kashalls/juno/internal/httpclient"
+	"github.com/kashalls/apis/internal/httpclient"
 )
 
 type Client struct {
