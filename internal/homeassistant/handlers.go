@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kashalls/juno/internal/ratelimit"
+	"github.com/kashalls/apis/internal/ratelimit"
 )
 
 var hexColorPattern = regexp.MustCompile(`^#?([0-9a-fA-F]{6})$`)

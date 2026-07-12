@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kashalls/juno/internal/api"
-	"github.com/kashalls/juno/internal/config"
-	"github.com/kashalls/juno/internal/homeassistant"
-	"github.com/kashalls/juno/internal/ratelimit"
+	"github.com/kashalls/apis/internal/api"
+	"github.com/kashalls/apis/internal/config"
+	"github.com/kashalls/apis/internal/homeassistant"
+	"github.com/kashalls/apis/internal/ratelimit"
 )
 
 const rateLimitInterval = 2 * time.Second

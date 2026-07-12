@@ -1,7 +1,6 @@
 // Package config loads each binary's runtime configuration from
-// environment variables. Juno, TRMNL, and Home Assistant each run as their
-// own binary/container and only load the subset of variables relevant to
-// them.
+// environment variables. TRMNL and Home Assistant each run as their own
+// binary/container and only load the subset of variables relevant to them.
 package config
 
 import (
@@ -9,38 +8,6 @@ import (
 	"os"
 	"strings"
 )
-
-// JunoConfig configures the Discord/Lanyard presence server (cmd/juno).
-type JunoConfig struct {
-	Port              string
-	DiscordBotToken   string
-	DiscordUserID     string
-	DiscordGuildID    string
-	TrustedProxyCIDRs []string
-}
-
-func LoadJuno() (*JunoConfig, error) {
-	cfg := &JunoConfig{
-		Port:              getEnvDefault("PORT", "8080"),
-		DiscordBotToken:   os.Getenv("DISCORD_BOT_TOKEN"),
-		DiscordUserID:     os.Getenv("DISCORD_USER_ID"),
-		DiscordGuildID:    os.Getenv("DISCORD_GUILD_ID"),
-		TrustedProxyCIDRs: parseCIDRList(os.Getenv("TRUSTED_PROXY_CIDRS")),
-	}
-
-	var missing []string
-	if cfg.DiscordBotToken == "" {
-		missing = append(missing, "DISCORD_BOT_TOKEN")
-	}
-	if cfg.DiscordUserID == "" {
-		missing = append(missing, "DISCORD_USER_ID")
-	}
-	if len(missing) > 0 {
-		return nil, fmt.Errorf("missing required environment variables: %v", missing)
-	}
-
-	return cfg, nil
-}
 
 // TRMNLConfig configures the TRMNL push server (cmd/trmnl).
 type TRMNLConfig struct {

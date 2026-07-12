@@ -58,7 +58,6 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - juno
           - trmnl
           - homeassistant
     steps:

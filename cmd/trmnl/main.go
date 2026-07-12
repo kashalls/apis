@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kashalls/juno/internal/api"
-	"github.com/kashalls/juno/internal/config"
-	"github.com/kashalls/juno/internal/ratelimit"
-	"github.com/kashalls/juno/internal/trmnl"
+	"github.com/kashalls/apis/internal/api"
+	"github.com/kashalls/apis/internal/config"
+	"github.com/kashalls/apis/internal/ratelimit"
+	"github.com/kashalls/apis/internal/trmnl"
 )
 
 const (

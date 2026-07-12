@@ -27,7 +27,6 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - juno
           - trmnl
           - homeassistant
         platform:
@@ -97,7 +96,6 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - juno
           - trmnl
           - homeassistant
     steps:
