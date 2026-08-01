@@ -1,6 +1,5 @@
-// Package config loads each binary's runtime configuration from
-// environment variables. TRMNL and Home Assistant each run as their own
-// binary/container and only load the subset of variables relevant to them.
+// Package config loads the apis binary's runtime configuration from
+// environment variables.
 package config
 
 import (
@@ -9,24 +8,43 @@ import (
 	"strings"
 )
 
-// TRMNLConfig configures the TRMNL push server (cmd/trmnl).
-type TRMNLConfig struct {
-	Port                 string
-	TRMNLTextWebhookURL  string
-	TRMNLImageWebhookURL string
-	PublicBaseURL        string
-	DataDir              string
-	TrustedProxyCIDRs    []string
+type Config struct {
+	Port                    string
+	TRMNLTextWebhookURL     string
+	TRMNLImageWebhookURL    string
+	PublicBaseURL           string
+	DataDir                 string
+	HomeAssistantBaseURL    string
+	HomeAssistantToken      string
+	HomeAssistantLightGroup string
+	SpotifyClientID         string
+	SpotifyClientSecret     string
+	SpotifyRedirectURI      string
+	RedisURL                string
+	GitHubUsername          string
+	GitHubToken             string
+	TrustedProxyCIDRs       []string
+	CORSAllowedOrigins      []string
 }
 
-func LoadTRMNL() (*TRMNLConfig, error) {
-	cfg := &TRMNLConfig{
-		Port:                 getEnvDefault("PORT", "8080"),
-		TRMNLTextWebhookURL:  os.Getenv("TRMNL_TEXT_WEBHOOK_URL"),
-		TRMNLImageWebhookURL: os.Getenv("TRMNL_IMAGE_WEBHOOK_URL"),
-		PublicBaseURL:        os.Getenv("PUBLIC_BASE_URL"),
-		DataDir:              getEnvDefault("DATA_DIR", "/data"),
-		TrustedProxyCIDRs:    parseCIDRList(os.Getenv("TRUSTED_PROXY_CIDRS")),
+func Load() (*Config, error) {
+	cfg := &Config{
+		Port:                    getEnvDefault("PORT", "8080"),
+		TRMNLTextWebhookURL:     os.Getenv("TRMNL_TEXT_WEBHOOK_URL"),
+		TRMNLImageWebhookURL:    os.Getenv("TRMNL_IMAGE_WEBHOOK_URL"),
+		PublicBaseURL:           os.Getenv("PUBLIC_BASE_URL"),
+		DataDir:                 getEnvDefault("DATA_DIR", "/data"),
+		HomeAssistantBaseURL:    os.Getenv("HOME_ASSISTANT_BASE_URL"),
+		HomeAssistantToken:      os.Getenv("HOME_ASSISTANT_TOKEN"),
+		HomeAssistantLightGroup: os.Getenv("HOME_ASSISTANT_LIGHT_GROUP"),
+		SpotifyClientID:         os.Getenv("SPOTIFY_CLIENT_ID"),
+		SpotifyClientSecret:     os.Getenv("SPOTIFY_CLIENT_SECRET"),
+		SpotifyRedirectURI:      os.Getenv("SPOTIFY_REDIRECT_URI"),
+		RedisURL:                os.Getenv("REDIS_URL"),
+		GitHubUsername:          os.Getenv("GITHUB_USERNAME"),
+		GitHubToken:             os.Getenv("GITHUB_TOKEN"),
+		TrustedProxyCIDRs:       parseCommaList(os.Getenv("TRUSTED_PROXY_CIDRS")),
+		CORSAllowedOrigins:      parseCommaList(os.Getenv("CORS_ALLOWED_ORIGINS")),
 	}
 
 	var missing []string
@@ -36,33 +54,6 @@ func LoadTRMNL() (*TRMNLConfig, error) {
 	if cfg.TRMNLImageWebhookURL == "" {
 		missing = append(missing, "TRMNL_IMAGE_WEBHOOK_URL")
 	}
-	if len(missing) > 0 {
-		return nil, fmt.Errorf("missing required environment variables: %v", missing)
-	}
-
-	return cfg, nil
-}
-
-// HomeAssistantConfig configures the Home Assistant light server
-// (cmd/homeassistant).
-type HomeAssistantConfig struct {
-	Port                    string
-	HomeAssistantBaseURL    string
-	HomeAssistantToken      string
-	HomeAssistantLightGroup string
-	TrustedProxyCIDRs       []string
-}
-
-func LoadHomeAssistant() (*HomeAssistantConfig, error) {
-	cfg := &HomeAssistantConfig{
-		Port:                    getEnvDefault("PORT", "8080"),
-		HomeAssistantBaseURL:    os.Getenv("HOME_ASSISTANT_BASE_URL"),
-		HomeAssistantToken:      os.Getenv("HOME_ASSISTANT_TOKEN"),
-		HomeAssistantLightGroup: os.Getenv("HOME_ASSISTANT_LIGHT_GROUP"),
-		TrustedProxyCIDRs:       parseCIDRList(os.Getenv("TRUSTED_PROXY_CIDRS")),
-	}
-
-	var missing []string
 	if cfg.HomeAssistantBaseURL == "" {
 		missing = append(missing, "HOME_ASSISTANT_BASE_URL")
 	}
@@ -71,6 +62,24 @@ func LoadHomeAssistant() (*HomeAssistantConfig, error) {
 	}
 	if cfg.HomeAssistantLightGroup == "" {
 		missing = append(missing, "HOME_ASSISTANT_LIGHT_GROUP")
+	}
+	if cfg.SpotifyClientID == "" {
+		missing = append(missing, "SPOTIFY_CLIENT_ID")
+	}
+	if cfg.SpotifyClientSecret == "" {
+		missing = append(missing, "SPOTIFY_CLIENT_SECRET")
+	}
+	if cfg.SpotifyRedirectURI == "" {
+		missing = append(missing, "SPOTIFY_REDIRECT_URI")
+	}
+	if cfg.RedisURL == "" {
+		missing = append(missing, "REDIS_URL")
+	}
+	if cfg.GitHubUsername == "" {
+		missing = append(missing, "GITHUB_USERNAME")
+	}
+	if cfg.GitHubToken == "" {
+		missing = append(missing, "GITHUB_TOKEN")
 	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("missing required environment variables: %v", missing)
@@ -86,12 +95,12 @@ func getEnvDefault(key, def string) string {
 	return def
 }
 
-func parseCIDRList(v string) []string {
-	var cidrs []string
-	for _, c := range strings.Split(v, ",") {
-		if c = strings.TrimSpace(c); c != "" {
-			cidrs = append(cidrs, c)
+func parseCommaList(v string) []string {
+	var items []string
+	for _, s := range strings.Split(v, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			items = append(items, s)
 		}
 	}
-	return cidrs
+	return items
 }

@@ -2,79 +2,91 @@ package api
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/kashalls/apis/internal/github"
 	"github.com/kashalls/apis/internal/homeassistant"
+	"github.com/kashalls/apis/internal/spotify"
 	"github.com/kashalls/apis/internal/trmnl"
 )
 
-// newBaseRouter sets up the middleware chain shared by every binary:
-// request IDs, client IP resolution, access logging (skipping /healthz
-// noise), panic recovery, and a request timeout. Callers add their own
-// routes on top.
-func newBaseRouter(trustedProxyCIDRs []string) *chi.Mux {
+type RouterConfig struct {
+	TRMNL              *trmnl.Handlers
+	HomeAssistant      *homeassistant.Handlers
+	Spotify            *spotify.Handlers
+	GitHub             *github.Handlers
+	TrustedProxyCIDRs  []string
+	CORSAllowedOrigins []string
+}
+
+// NewRouter builds the single router serving all three integrations,
+// each mounted under its own /api/<service> prefix.
+func NewRouter(cfg RouterConfig) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	if len(trustedProxyCIDRs) > 0 {
-		r.Use(middleware.ClientIPFromXFF(trustedProxyCIDRs...))
+	if len(cfg.TrustedProxyCIDRs) > 0 {
+		r.Use(middleware.ClientIPFromXFF(cfg.TrustedProxyCIDRs...))
 	} else {
 		r.Use(middleware.ClientIPFromRemoteAddr)
 	}
-	r.Use(skipHealthzLogger)
+	r.Use(cors.Handler(corsOptions(cfg.CORSAllowedOrigins)))
+	r.Use(skipNoisyLogger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	r.Get("/healthz", healthHandler)
+	r.Handle("/metrics", promhttp.Handler())
 
-	return r
-}
-
-type TRMNLRouterConfig struct {
-	Handlers          *trmnl.Handlers
-	ImagesDir         string
-	TrustedProxyCIDRs []string
-}
-
-// NewTRMNLRouter serves the TRMNL push API under /api and the
-// uploaded-image file server at /images.
-func NewTRMNLRouter(cfg TRMNLRouterConfig) http.Handler {
-	r := newBaseRouter(cfg.TrustedProxyCIDRs)
-
-	r.Route("/api", func(tr chi.Router) {
-		tr.Post("/text", cfg.Handlers.PushText)
-		tr.Post("/image", cfg.Handlers.PushImage)
+	r.Route("/api", func(ar chi.Router) {
+		ar.Route("/trmnl", cfg.TRMNL.Routes)
+		ar.Route("/homeassistant", cfg.HomeAssistant.Routes)
+		ar.Route("/spotify", cfg.Spotify.Routes)
+		ar.Route("/github", cfg.GitHub.Routes)
 	})
 
-	fileServer := http.FileServer(http.Dir(cfg.ImagesDir))
-	r.Handle("/images/*", http.StripPrefix("/images/", fileServer))
-
 	return r
 }
 
-type HomeAssistantRouterConfig struct {
-	Handlers          *homeassistant.Handlers
-	TrustedProxyCIDRs []string
+// corsOptions returns explicit AllowedOrigins when the caller configured
+// some, otherwise falls back to a default policy: any ok8.sh origin
+// (apex or subdomain) or any origin on port 3000 (local dev).
+func corsOptions(allowedOrigins []string) cors.Options {
+	opts := cors.Options{
+		AllowedMethods: []string{"GET", "POST"},
+		AllowedHeaders: []string{"Content-Type"},
+	}
+	if len(allowedOrigins) > 0 {
+		opts.AllowedOrigins = allowedOrigins
+	} else {
+		opts.AllowOriginFunc = defaultAllowedOrigin
+	}
+	return opts
 }
 
-// NewHomeAssistantRouter serves the Home Assistant light API under /api.
-func NewHomeAssistantRouter(cfg HomeAssistantRouterConfig) http.Handler {
-	r := newBaseRouter(cfg.TrustedProxyCIDRs)
-
-	r.Post("/api/color", cfg.Handlers.SetColor)
-
-	return r
+func defaultAllowedOrigin(_ *http.Request, origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	return host == "ok8.sh" || strings.HasSuffix(host, ".ok8.sh") || u.Port() == "3000"
 }
 
-// skipHealthzLogger applies middleware.Logger to every request except
-// /healthz, keeping access logs free of health-check noise while still
-// logging unmatched routes (404s/405s), which per-route middleware would miss.
-func skipHealthzLogger(next http.Handler) http.Handler {
+// skipNoisyLogger applies middleware.Logger to every request except
+// /healthz and /metrics, keeping access logs free of health-check and
+// scrape noise while still logging unmatched routes (404s/405s), which
+// per-route middleware would miss.
+func skipNoisyLogger(next http.Handler) http.Handler {
 	logged := middleware.Logger(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/metrics" {
 			next.ServeHTTP(w, r)
 			return
 		}

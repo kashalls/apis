@@ -1,24 +1,27 @@
 services:
-  trmnl:
+  apis:
     build:
       context: .
-      target: trmnl
-    image: trmnl:latest
+      target: apis
+    image: apis:latest
     restart: unless-stopped
     ports:
-      - "8081:8080"
+      - "8080:8080"
     env_file:
       - .env
     volumes:
       - ./data:/data
+    depends_on:
+      - redis
 
-  homeassistant:
-    build:
-      context: .
-      target: homeassistant
-    image: homeassistant:latest
+  # Token storage for spotify. AOF persistence keeps the OAuth tokens
+  # across container restarts.
+  redis:
+    image: redis:8-alpine
     restart: unless-stopped
-    ports:
-      - "8082:8080"
-    env_file:
-      - .env
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
