@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/kashalls/apis/internal/ratelimit"
 )
 
@@ -45,6 +47,17 @@ func NewHandlers(textClient *Client, textRateLimiter *ratelimit.Limiter, imageCl
 		dataDir:       dataDir,
 		publicBaseURL: strings.TrimRight(publicBaseURL, "/"),
 	}
+}
+
+// Routes registers the trmnl endpoints, including the file server for
+// images uploaded via PushImage.
+func (h *Handlers) Routes(r chi.Router) {
+	r.Post("/text", h.PushText)
+	r.Post("/image", h.PushImage)
+
+	imagesDir := filepath.Join(h.dataDir, "images")
+	fileServer := http.FileServer(http.Dir(imagesDir))
+	r.Handle("/images/*", http.StripPrefix("/images/", fileServer))
 }
 
 // pushOrRateLimit checks the endpoint's rate limit and, only if it's not
@@ -171,7 +184,7 @@ func (h *Handlers) storeUploadedImage(w http.ResponseWriter, r *http.Request) (s
 		return "", fmt.Errorf("save uploaded image: %w", err)
 	}
 
-	return fmt.Sprintf("%s/images/%s", h.publicBaseURL, name), nil
+	return fmt.Sprintf("%s/api/trmnl/images/%s", h.publicBaseURL, name), nil
 }
 
 func randomFilename() string {

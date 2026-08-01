@@ -11,8 +11,7 @@ COPY . .
 # targeting a different one - no QEMU emulation needed for this step.
 ARG TARGETOS
 ARG TARGETARCH
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/trmnl ./cmd/trmnl
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/homeassistant ./cmd/homeassistant
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/apis ./cmd/apis
 
 FROM alpine:3.24 AS base
 
@@ -32,17 +31,12 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD wget -q -O- http://localhost:${PORT}/healthz || exit 1
 
-# --- trmnl: TRMNL push API, persists uploaded images to /data ---
-FROM base AS trmnl
-COPY --from=builder /out/trmnl /app/trmnl
+# --- apis: trmnl, homeassistant, and spotify APIs in one process,
+# persists trmnl's uploaded images to /data ---
+FROM base AS apis
+COPY --from=builder /out/apis /app/apis
 RUN mkdir -p /data && chown -R app:app /data
 ENV DATA_DIR=/data
 VOLUME ["/data"]
 USER app
-ENTRYPOINT ["/app/trmnl"]
-
-# --- homeassistant: Home Assistant light API ---
-FROM base AS homeassistant
-COPY --from=builder /out/homeassistant /app/homeassistant
-USER app
-ENTRYPOINT ["/app/homeassistant"]
+ENTRYPOINT ["/app/apis"]
