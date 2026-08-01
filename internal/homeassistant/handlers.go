@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/kashalls/apis/internal/ratelimit"
 )
 
@@ -21,6 +23,10 @@ type Handlers struct {
 
 func NewHandlers(client *Client, rateLimiter *ratelimit.Limiter, lightGroup string) *Handlers {
 	return &Handlers{client: client, rateLimiter: rateLimiter, lightGroup: lightGroup}
+}
+
+func (h *Handlers) Routes(r chi.Router) {
+	r.Post("/color", h.SetColor)
 }
 
 type setColorRequest struct {
