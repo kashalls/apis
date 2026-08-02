@@ -1,4 +1,4 @@
-package github
+package redisconn
 
 import (
 	"context"
@@ -8,14 +8,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// cacheTTL is how long a cached value is served before the next request
-// for it triggers a live refetch.
-const cacheTTL = 30 * time.Minute
-
-// cached checks redis for key; on a miss (or an undecodable cached
+// Cached checks redis for key; on a miss (or an undecodable cached
 // value) it calls fetch, best-effort stores the JSON-encoded result with
-// cacheTTL, and returns it.
-func cached[T any](ctx context.Context, rdb *redis.Client, key string, fetch func(context.Context) (T, error)) (T, error) {
+// ttl, and returns it.
+func Cached[T any](ctx context.Context, rdb *redis.Client, key string, ttl time.Duration, fetch func(context.Context) (T, error)) (T, error) {
 	var out T
 	if raw, err := rdb.Get(ctx, key).Result(); err == nil {
 		if json.Unmarshal([]byte(raw), &out) == nil {
@@ -29,7 +25,7 @@ func cached[T any](ctx context.Context, rdb *redis.Client, key string, fetch fun
 	}
 
 	if raw, err := json.Marshal(out); err == nil {
-		_ = rdb.Set(ctx, key, raw, cacheTTL).Err()
+		_ = rdb.Set(ctx, key, raw, ttl).Err()
 	}
 	return out, nil
 }
