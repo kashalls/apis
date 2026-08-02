@@ -38,6 +38,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	}
 	r.Use(cors.Handler(corsOptions(cfg.CORSAllowedOrigins)))
 	r.Use(skipNoisyLogger)
+	r.Use(metricsMiddleware)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 

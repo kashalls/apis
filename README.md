@@ -26,6 +26,8 @@ that bundles four integrations, each under its own path prefix:
 
 **spotify.** A one-time OAuth authorization-code flow (`GET /api/spotify/authorize` returns the Spotify consent URL, which redirects back to `GET /api/spotify/setup`) yields a refresh token, stored in Redis (`spotify/refresh_token`, plus `spotify/access_token` cached with a TTL matching Spotify's expiry). After that, a background poller refreshes the current playback state once a second and `GET /api/spotify/current` serves it from that in-memory cache (so the endpoint is instant and doesn't call Spotify per request); `GET /api/spotify/recents` proxies the recently-played history from the Spotify Web API directly.
 
+Whenever the polled state actually changes (track, play/pause, or device - not just playback position ticking up), the same JSON is also published to the Redis channel `spotify/current`, and, if `MQTT_BROKER_URL` is set, retained to `MQTT_TOPIC` (default `spotify/current`) - so other processes (a frontend, Home Assistant, etc.) can react in real time instead of polling this API themselves.
+
 **github.** `GET /api/github/pinned` and `GET /api/github/contributions` read from GitHub's GraphQL API using a personal access token. Unlike spotify's poller, these are cached lazily in Redis (`cache/github/pinned`, `cache/github/contributions`) for 30 minutes on a cache-aside basis: a request only calls GitHub when the cached value is missing or has expired. `GITHUB_USERNAME` picks whose pins to show; the contribution calendar always reflects whoever `GITHUB_TOKEN` belongs to (GitHub's GraphQL `viewer` field has no separate username parameter).
 
 ## One-time setup
@@ -72,6 +74,10 @@ SPOTIFY_CLIENT_ID=
 SPOTIFY_CLIENT_SECRET=
 SPOTIFY_REDIRECT_URI=
 REDIS_URL=redis://redis:6379/0
+MQTT_BROKER_URL=
+MQTT_USERNAME=
+MQTT_PASSWORD=
+MQTT_TOPIC=spotify/current
 GITHUB_USERNAME=
 GITHUB_TOKEN=
 TRUSTED_PROXY_CIDRS=
@@ -79,6 +85,8 @@ CORS_ALLOWED_ORIGINS=
 ```
 
 `PUBLIC_BASE_URL` is only required if you plan to use the image-upload path of `/api/trmnl/image`; it's used to build the URL your uploaded image is served back at.
+
+`MQTT_BROKER_URL` is optional - spotify's current-track changes are always published to the Redis channel `spotify/current` regardless, but setting a broker URL (e.g. `tcp://mosquitto:1883`) additionally retains the same JSON on `MQTT_TOPIC`. Leave it blank to skip MQTT entirely; nothing else in the app requires a broker.
 
 `TRUSTED_PROXY_CIDRS` is a comma-separated list of CIDRs for reverse proxies you trust to set `X-Forwarded-For` (e.g. `10.0.0.0/8`). Leave blank if the service is reachable directly, with no reverse proxy in front.
 
