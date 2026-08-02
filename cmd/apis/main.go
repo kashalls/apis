@@ -11,13 +11,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	"github.com/kashalls/apis/internal/api"
 	"github.com/kashalls/apis/internal/config"
 	"github.com/kashalls/apis/internal/github"
 	"github.com/kashalls/apis/internal/homeassistant"
+	"github.com/kashalls/apis/internal/mqtt"
 	"github.com/kashalls/apis/internal/ratelimit"
+	"github.com/kashalls/apis/internal/redisconn"
 	"github.com/kashalls/apis/internal/spotify"
 	"github.com/kashalls/apis/internal/trmnl"
 )
@@ -61,20 +61,27 @@ func run() error {
 	}
 	trmnl.StartImageSweeper(ctx, imagesDir, imageSweepInterval)
 
-	opts, err := redis.ParseURL(cfg.RedisURL)
-	if err != nil {
-		return fmt.Errorf("parse REDIS_URL: %w", err)
-	}
-	rdb := redis.NewClient(opts)
-	defer rdb.Close()
-
 	startupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	if err := rdb.Ping(startupCtx).Err(); err != nil {
-		return fmt.Errorf("connect to redis: %w", err)
+
+	rdb, err := redisconn.New(startupCtx, cfg.RedisURL)
+	if err != nil {
+		return err
+	}
+	defer rdb.Close()
+
+	var mqttClient *mqtt.Client
+	if cfg.MQTTBrokerURL != "" {
+		mqttClient, err = mqtt.New(cfg.MQTTBrokerURL, cfg.MQTTUsername, cfg.MQTTPassword)
+		if err != nil {
+			return fmt.Errorf("connect to mqtt: %w", err)
+		}
+		defer mqttClient.Close()
+	} else {
+		slog.Info("MQTT_BROKER_URL not set, spotify current-track mqtt publishing disabled")
 	}
 
-	spotifyClient := spotify.NewClient(cfg.SpotifyClientID, cfg.SpotifyClientSecret, cfg.SpotifyRedirectURI, rdb)
+	spotifyClient := spotify.NewClient(cfg.SpotifyClientID, cfg.SpotifyClientSecret, cfg.SpotifyRedirectURI, rdb, mqttClient, cfg.MQTTTopic)
 	if authorized, err := spotifyClient.Authorized(startupCtx); err == nil && !authorized {
 		slog.Info("spotify not authorized yet, visit /api/spotify/authorize to set up")
 	}

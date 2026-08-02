@@ -91,7 +91,7 @@ func newTestClient(t *testing.T) (*Client, *miniredis.Miniredis) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { rdb.Close() })
 
-	c := NewClient("id", "secret", "http://localhost/api/setup", rdb)
+	c := NewClient("id", "secret", "http://localhost/api/setup", rdb, nil, "")
 	c.accountsURL = accounts.URL
 	c.apiURL = apiSrv.URL
 	return c, mr

@@ -23,6 +23,10 @@ type Config struct {
 	RedisURL                string
 	GitHubUsername          string
 	GitHubToken             string
+	MQTTBrokerURL           string
+	MQTTUsername            string
+	MQTTPassword            string
+	MQTTTopic               string
 	TrustedProxyCIDRs       []string
 	CORSAllowedOrigins      []string
 }
@@ -43,6 +47,10 @@ func Load() (*Config, error) {
 		RedisURL:                os.Getenv("REDIS_URL"),
 		GitHubUsername:          os.Getenv("GITHUB_USERNAME"),
 		GitHubToken:             os.Getenv("GITHUB_TOKEN"),
+		MQTTBrokerURL:           os.Getenv("MQTT_BROKER_URL"),
+		MQTTUsername:            os.Getenv("MQTT_USERNAME"),
+		MQTTPassword:            os.Getenv("MQTT_PASSWORD"),
+		MQTTTopic:               getEnvDefault("MQTT_TOPIC", "spotify/current"),
 		TrustedProxyCIDRs:       parseCommaList(os.Getenv("TRUSTED_PROXY_CIDRS")),
 		CORSAllowedOrigins:      parseCommaList(os.Getenv("CORS_ALLOWED_ORIGINS")),
 	}

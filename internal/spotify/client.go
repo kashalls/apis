@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/kashalls/apis/internal/mqtt"
 )
 
 const (
@@ -56,9 +58,19 @@ type Client struct {
 	// Handlers.Current can serve it without calling Spotify per request.
 	currentMu sync.RWMutex
 	current   *Current
+
+	// mqtt is nil when MQTT isn't configured, in which case publishing is
+	// skipped there (redis publish still happens either way).
+	mqtt      *mqtt.Client
+	mqttTopic string
+
+	// lastPublishedMu guards lastPublished, used by publishIfChanged
+	// (poll.go) to only publish on an actual playback change.
+	lastPublishedMu sync.RWMutex
+	lastPublished   *Current
 }
 
-func NewClient(clientID, clientSecret, redirectURI string, rdb *redis.Client) *Client {
+func NewClient(clientID, clientSecret, redirectURI string, rdb *redis.Client, mqttClient *mqtt.Client, mqttTopic string) *Client {
 	return &Client{
 		clientID:     clientID,
 		clientSecret: clientSecret,
@@ -67,6 +79,8 @@ func NewClient(clientID, clientSecret, redirectURI string, rdb *redis.Client) *C
 		apiURL:       apiBaseURL,
 		httpClient:   &http.Client{Timeout: 10 * time.Second},
 		redis:        rdb,
+		mqtt:         mqttClient,
+		mqttTopic:    mqttTopic,
 	}
 }
 
