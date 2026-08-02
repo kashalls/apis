@@ -7,13 +7,19 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 
 	"github.com/kashalls/apis/internal/httpclient"
+	"github.com/kashalls/apis/internal/redisconn"
 )
 
 const graphqlURL = "https://api.github.com/graphql"
+
+// cacheTTL is how long a cached value is served before the next request
+// for it triggers a live refetch.
+const cacheTTL = 30 * time.Minute
 
 type Client struct {
 	http     *httpclient.Client
@@ -121,7 +127,7 @@ type pinnedResult struct {
 // Pinned returns the user's pinned repositories, cached in Redis for
 // cacheTTL.
 func (c *Client) Pinned(ctx context.Context) ([]PinnedRepo, error) {
-	return cached(ctx, c.redis, "cache/github/pinned", c.fetchPinned)
+	return redisconn.Cached(ctx, c.redis, "cache/github/pinned", cacheTTL, c.fetchPinned)
 }
 
 func (c *Client) fetchPinned(ctx context.Context) ([]PinnedRepo, error) {
@@ -199,7 +205,7 @@ type contributionsResult struct {
 // Contributions returns the token owner's contribution calendar, cached
 // in Redis for cacheTTL.
 func (c *Client) Contributions(ctx context.Context) (*Contributions, error) {
-	return cached(ctx, c.redis, "cache/github/contributions", c.fetchContributions)
+	return redisconn.Cached(ctx, c.redis, "cache/github/contributions", cacheTTL, c.fetchContributions)
 }
 
 func (c *Client) fetchContributions(ctx context.Context) (*Contributions, error) {
