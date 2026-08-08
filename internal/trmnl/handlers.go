@@ -1,3 +1,10 @@
+// Package trmnl serves a TRMNL device via its Polling private-plugin
+// strategy (https://docs.trmnl.com/go/private-plugins/polling): TRMNL
+// itself issues a GET to a URL we give it and expects the response
+// body's root-level JSON keys to become the merge variables. PushText
+// and PushImage publish new content to mqtt instead of calling TRMNL
+// directly; StartQueueConsumer subscribes and appends each message onto
+// a redis-backed queue, which PollText/PollImage serve from.
 package trmnl
 
 import (
@@ -13,7 +20,9 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/redis/go-redis/v9"
 
+	"github.com/kashalls/apis/internal/mqtt"
 	"github.com/kashalls/apis/internal/ratelimit"
 )
 
@@ -25,54 +34,59 @@ var allowedImageTypes = map[string]string{
 	"image/webp": ".webp",
 }
 
-// endpoint pairs a TRMNL webhook client with its own independent rate
-// limiter, since text and image pushes go to separate TRMNL private
-// plugins (each with its own webhook UUID and quota).
-type endpoint struct {
-	client      *Client
-	rateLimiter *ratelimit.Limiter
-}
-
 type Handlers struct {
-	text          *endpoint
-	image         *endpoint
+	mqtt         *mqtt.Client
+	redis        *redis.Client
+	textLimiter  *ratelimit.Limiter
+	imageLimiter *ratelimit.Limiter
+
 	dataDir       string
 	publicBaseURL string
 }
 
-func NewHandlers(textClient *Client, textRateLimiter *ratelimit.Limiter, imageClient *Client, imageRateLimiter *ratelimit.Limiter, dataDir, publicBaseURL string) *Handlers {
+func NewHandlers(mqttClient *mqtt.Client, rdb *redis.Client, textLimiter, imageLimiter *ratelimit.Limiter, dataDir, publicBaseURL string) *Handlers {
 	return &Handlers{
-		text:          &endpoint{client: textClient, rateLimiter: textRateLimiter},
-		image:         &endpoint{client: imageClient, rateLimiter: imageRateLimiter},
+		mqtt:          mqttClient,
+		redis:         rdb,
+		textLimiter:   textLimiter,
+		imageLimiter:  imageLimiter,
 		dataDir:       dataDir,
 		publicBaseURL: strings.TrimRight(publicBaseURL, "/"),
 	}
 }
 
-// Routes registers the trmnl endpoints, including the file server for
-// images uploaded via PushImage.
+// Routes registers the trmnl endpoints: POST enqueues a new message for
+// TRMNL's Polling strategy to pick up via the matching GET, plus the
+// file server for images uploaded via PushImage.
 func (h *Handlers) Routes(r chi.Router) {
 	r.Post("/text", h.PushText)
+	r.Get("/text", h.PollText)
 	r.Post("/image", h.PushImage)
+	r.Get("/image", h.PollImage)
 
 	imagesDir := filepath.Join(h.dataDir, "images")
 	fileServer := http.FileServer(http.Dir(imagesDir))
 	r.Handle("/images/*", http.StripPrefix("/images/", fileServer))
 }
 
-// pushOrRateLimit checks the endpoint's rate limit and, only if it's not
-// exceeded, performs the actual TRMNL webhook push. Validation of the
-// request body must happen before calling this, so a malformed request
-// never consumes the quota.
-func pushOrRateLimit(w http.ResponseWriter, r *http.Request, ep *endpoint, vars map[string]any) {
-	if ok, retryAfter := ep.rateLimiter.Allow(); !ok {
+// publishOrRateLimit checks limiter and, only if it's not exceeded,
+// publishes vars to the mqtt topic for StartQueueConsumer to pick up.
+// Validation of the request body must happen before calling this, so a
+// malformed request never consumes the quota.
+func publishOrRateLimit(w http.ResponseWriter, r *http.Request, mqttClient *mqtt.Client, limiter *ratelimit.Limiter, topic string, vars map[string]any) {
+	if ok, retryAfter := limiter.Allow(); !ok {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
 		http.Error(w, "rate limit exceeded, try again later", http.StatusTooManyRequests)
 		return
 	}
 
-	if err := ep.client.PushMergeVariables(r.Context(), vars); err != nil {
-		http.Error(w, fmt.Sprintf("failed to push to trmnl: %v", err), http.StatusBadGateway)
+	payload, err := json.Marshal(vars)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("encode message: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if err := mqttClient.Publish(topic, payload, 1, false); err != nil {
+		http.Error(w, fmt.Sprintf("failed to queue message: %v", err), http.StatusBadGateway)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
@@ -99,7 +113,7 @@ func (h *Handlers) PushText(w http.ResponseWriter, r *http.Request) {
 		vars["author"] = req.Author
 	}
 
-	pushOrRateLimit(w, r, h.text, vars)
+	publishOrRateLimit(w, r, h.mqtt, h.textLimiter, textTopic, vars)
 }
 
 type imageURLRequest struct {
@@ -136,7 +150,28 @@ func (h *Handlers) PushImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pushOrRateLimit(w, r, h.image, map[string]any{"image_url": imageURL})
+	publishOrRateLimit(w, r, h.mqtt, h.imageLimiter, imageTopic, map[string]any{"image_url": imageURL})
+}
+
+// poll writes the current merge_variables for key as JSON, for TRMNL's
+// Polling strategy to consume directly (root-level keys become merge
+// variables - see nextQueued for the queue-drain/keep-last behavior).
+func (h *Handlers) poll(w http.ResponseWriter, r *http.Request, key string) {
+	vars, err := nextQueued(r.Context(), h.redis, key)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to read queue: %v", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(vars)
+}
+
+func (h *Handlers) PollText(w http.ResponseWriter, r *http.Request) {
+	h.poll(w, r, textQueueKey)
+}
+
+func (h *Handlers) PollImage(w http.ResponseWriter, r *http.Request) {
+	h.poll(w, r, imageQueueKey)
 }
 
 func (h *Handlers) storeUploadedImage(w http.ResponseWriter, r *http.Request) (string, error) {

@@ -6,8 +6,6 @@ import "github.com/caarlos0/env/v11"
 
 type Config struct {
 	Port                    string   `env:"PORT" envDefault:"8080"`
-	TRMNLTextWebhookURL     string   `env:"TRMNL_TEXT_WEBHOOK_URL,required,notEmpty"`
-	TRMNLImageWebhookURL    string   `env:"TRMNL_IMAGE_WEBHOOK_URL,required,notEmpty"`
 	PublicBaseURL           string   `env:"PUBLIC_BASE_URL"`
 	DataDir                 string   `env:"DATA_DIR" envDefault:"/data"`
 	HomeAssistantBaseURL    string   `env:"HOME_ASSISTANT_BASE_URL,required,notEmpty"`
@@ -19,7 +17,7 @@ type Config struct {
 	RedisURL                string   `env:"REDIS_URL,required,notEmpty"`
 	GitHubUsername          string   `env:"GITHUB_USERNAME,required,notEmpty"`
 	GitHubToken             string   `env:"GITHUB_TOKEN,required,notEmpty"`
-	MQTTBrokerURL           string   `env:"MQTT_BROKER_URL"`
+	MQTTBrokerURL           string   `env:"MQTT_BROKER_URL,required,notEmpty"`
 	MQTTUsername            string   `env:"MQTT_USERNAME"`
 	MQTTPassword            string   `env:"MQTT_PASSWORD"`
 	MQTTTopic               string   `env:"MQTT_TOPIC" envDefault:"spotify/current"`

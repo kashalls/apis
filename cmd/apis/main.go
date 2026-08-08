@@ -47,20 +47,6 @@ func run() error {
 	haClient := homeassistant.NewClient(cfg.HomeAssistantBaseURL, cfg.HomeAssistantToken)
 	haHandlers := homeassistant.NewHandlers(haClient, ratelimit.NewLimiter(homeAssistantRateLimitInterval), cfg.HomeAssistantLightGroup)
 
-	textClient := trmnl.NewClient(cfg.TRMNLTextWebhookURL)
-	imageClient := trmnl.NewClient(cfg.TRMNLImageWebhookURL)
-	trmnlHandlers := trmnl.NewHandlers(
-		textClient, ratelimit.NewLimiter(trmnlRateLimitInterval),
-		imageClient, ratelimit.NewLimiter(trmnlRateLimitInterval),
-		cfg.DataDir, cfg.PublicBaseURL,
-	)
-
-	imagesDir := filepath.Join(cfg.DataDir, "images")
-	if err := os.MkdirAll(imagesDir, 0o755); err != nil {
-		return err
-	}
-	trmnl.StartImageSweeper(ctx, imagesDir, imageSweepInterval)
-
 	startupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -70,16 +56,26 @@ func run() error {
 	}
 	defer rdb.Close()
 
-	var mqttClient *mqtt.Client
-	if cfg.MQTTBrokerURL != "" {
-		mqttClient, err = mqtt.New(cfg.MQTTBrokerURL, cfg.MQTTUsername, cfg.MQTTPassword)
-		if err != nil {
-			return fmt.Errorf("connect to mqtt: %w", err)
-		}
-		defer mqttClient.Close()
-	} else {
-		slog.Info("MQTT_BROKER_URL not set, spotify current-track mqtt publishing disabled")
+	mqttClient, err := mqtt.New(cfg.MQTTBrokerURL, cfg.MQTTUsername, cfg.MQTTPassword)
+	if err != nil {
+		return fmt.Errorf("connect to mqtt: %w", err)
 	}
+	defer mqttClient.Close()
+
+	trmnlHandlers := trmnl.NewHandlers(
+		mqttClient, rdb,
+		ratelimit.NewLimiter(trmnlRateLimitInterval), ratelimit.NewLimiter(trmnlRateLimitInterval),
+		cfg.DataDir, cfg.PublicBaseURL,
+	)
+	if err := trmnl.StartQueueConsumer(mqttClient, rdb); err != nil {
+		return fmt.Errorf("start trmnl queue consumer: %w", err)
+	}
+
+	imagesDir := filepath.Join(cfg.DataDir, "images")
+	if err := os.MkdirAll(imagesDir, 0o755); err != nil {
+		return err
+	}
+	trmnl.StartImageSweeper(ctx, imagesDir, imageSweepInterval)
 
 	spotifyClient := spotify.NewClient(cfg.SpotifyClientID, cfg.SpotifyClientSecret, cfg.SpotifyRedirectURI, rdb, mqttClient, cfg.MQTTTopic)
 	if authorized, err := spotifyClient.Authorized(startupCtx); err == nil && !authorized {

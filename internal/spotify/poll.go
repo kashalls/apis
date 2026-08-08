@@ -87,7 +87,7 @@ func (c *Client) publishIfChanged(ctx context.Context, current *Current) {
 	}
 
 	if c.mqtt != nil {
-		if err := c.mqtt.Publish(c.mqttTopic, payload); err != nil {
+		if err := c.mqtt.Publish(c.mqttTopic, payload, 0, true); err != nil {
 			slog.Warn("publish current to mqtt", "err", err)
 		}
 	}

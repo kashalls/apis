@@ -3,8 +3,8 @@
 A small self-hosted Go HTTP service, built from one repo and one binary,
 that bundles four integrations, each under its own path prefix:
 
-- **trmnl** (`/api/trmnl`) - endpoints to push text or an image to a
-  [TRMNL](https://usetrmnl.com) device via its private-plugin webhook.
+- **trmnl** (`/api/trmnl`) - endpoints to queue text or an image for a
+  [TRMNL](https://usetrmnl.com) device's Polling-strategy private plugin.
 - **homeassistant** (`/api/homeassistant`) - an endpoint to set a Home
   Assistant light (or light group)'s color.
 - **spotify** (`/api/spotify`) - endpoints to read the currently playing
@@ -17,27 +17,30 @@ that bundles four integrations, each under its own path prefix:
 
 ## How it works
 
-**trmnl.** TRMNL's private-plugin webhook only accepts a JSON body of `merge_variables`, rendered through a template you configure once in the TRMNL dashboard — it does not accept raw image bytes. This service uses two separate private plugins (and webhooks), one per content type, so each gets its own independent TRMNL rate limit instead of sharing one pool:
-- `POST /api/trmnl/text` sends `{text, author}` as merge variables to `TRMNL_TEXT_WEBHOOK_URL`.
-- `POST /api/trmnl/image` accepts either a `multipart/form-data` upload (stored and served back at a URL under `/api/trmnl/images/`) or a JSON `{"image_url": "..."}` if you already have a publicly reachable image URL. Either way, the resulting URL is sent as the `image_url` merge variable to `TRMNL_IMAGE_WEBHOOK_URL` for your plugin template to render (e.g. `<img src="{{ image_url }}">`).
-- Each endpoint is independently rate limited to 1 request per 5 minutes on top of whatever TRMNL's own per-plugin webhook limit is (12x/hour standard, 30x/hour on TRMNL+).
+**trmnl.** TRMNL private plugins can either be pushed to (Webhook strategy) or fetch content themselves (Polling strategy, where TRMNL issues a `GET` to a URL you give it and treats the response body's root-level JSON keys as merge variables). This service uses Polling for both content types:
+- `POST /api/trmnl/text` accepts `{text, author}`, and `POST /api/trmnl/image` accepts either a `multipart/form-data` upload (stored and served back at a URL under `/api/trmnl/images/`) or a JSON `{"image_url": "..."}`. Neither talks to TRMNL directly - each publishes the resulting merge variables to an MQTT topic (`trmnl/text` / `trmnl/image`), which this service's own subscriber picks up and appends to a Redis-backed queue. Each is independently rate limited to 1 push per 5 minutes, to prevent flooding that queue.
+- `GET /api/trmnl/text` and `GET /api/trmnl/image` - the URLs you configure as each plugin's Polling URL - serve the queue: if more than one message is pending, the next one in line is popped and returned (draining a backlog one poll at a time); if only one remains, it's served again without being removed, so the display doesn't go blank between real pushes; if nothing's ever been pushed, an empty object is returned.
 
 **homeassistant.** `POST /api/homeassistant/color` sets a light (or light group) entity's color via the Home Assistant REST API, using a long-lived access token. Rate limited to 1 request per 2 seconds.
 
 **spotify.** A one-time OAuth authorization-code flow (`GET /api/spotify/authorize` returns the Spotify consent URL, which redirects back to `GET /api/spotify/setup`) yields a refresh token, stored in Redis (`spotify/refresh_token`, plus `spotify/access_token` cached with a TTL matching Spotify's expiry). After that, a background poller refreshes the current playback state once a second and `GET /api/spotify/current` serves it from that in-memory cache (so the endpoint is instant and doesn't call Spotify per request); `GET /api/spotify/recents` proxies the recently-played history from the Spotify Web API directly.
 
-Whenever the polled state actually changes (track, play/pause, or device - not just playback position ticking up), the same JSON is also published to the Redis channel `spotify/current`, and, if `MQTT_BROKER_URL` is set, retained to `MQTT_TOPIC` (default `spotify/current`) - so other processes (a frontend, Home Assistant, etc.) can react in real time instead of polling this API themselves.
+Whenever the polled state actually changes (track, play/pause, or device - not just playback position ticking up), the same JSON is also published to the Redis channel `spotify/current` and retained to `MQTT_TOPIC` (default `spotify/current`) - so other processes (a frontend, Home Assistant, etc.) can react in real time instead of polling this API themselves.
 
 **github.** `GET /api/github/pinned` and `GET /api/github/contributions` read from GitHub's GraphQL API using a personal access token. Unlike spotify's poller, these are cached lazily in Redis (`cache/github/pinned`, `cache/github/contributions`) for 30 minutes on a cache-aside basis: a request only calls GitHub when the cached value is missing or has expired. `GITHUB_USERNAME` picks whose pins to show; the contribution calendar always reflects whoever `GITHUB_TOKEN` belongs to (GitHub's GraphQL `viewer` field has no separate username parameter).
 
 ## One-time setup
 
+### MQTT broker
+
+Set `MQTT_BROKER_URL` to a broker reachable from this service (e.g. Mosquitto) - it's required, since trmnl's text/image push has no other delivery path (see below) and spotify's current-track changes publish here too. `MQTT_USERNAME`/`MQTT_PASSWORD` are optional if your broker needs auth.
+
 ### TRMNL private plugins (trmnl)
 
-Create **two** private plugins in the TRMNL dashboard, so text and image pushes each get their own webhook and rate-limit quota:
+Create **two** private plugins in the TRMNL dashboard, both with strategy **Polling** (verb GET), so text and image each get their own queue and rate-limit quota:
 
-1. **Text plugin**: create a Private Plugin, design its template to render `{{ text }}` / `{{ author }}`, then copy its **Webhook URL** (looks like `https://usetrmnl.com/api/custom_plugins/<uuid>`) into `TRMNL_TEXT_WEBHOOK_URL`.
-2. **Image plugin**: create a second Private Plugin, design its template as `<img src="{{ image_url }}">`, then copy its Webhook URL into `TRMNL_IMAGE_WEBHOOK_URL`.
+1. **Text plugin**: create a Private Plugin, design its template to render `{{ text }}` / `{{ author }}`, set its strategy to Polling with the Polling URL `https://<your-host>/api/trmnl/text`.
+2. **Image plugin**: create a second Private Plugin, design its template as `<img src="{{ image_url }}">`, set its strategy to Polling with the Polling URL `https://<your-host>/api/trmnl/image`.
 3. Add each plugin to whichever playlist/device you want it to show up on.
 
 ### Home Assistant (homeassistant)
@@ -59,12 +62,14 @@ Create **two** private plugins in the TRMNL dashboard, so text and image pushes 
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in the values (see comments in that file for details) - the service always loads and requires all four integrations' variables.
+Copy `.env.example` to `.env` and fill in the values (see comments in that file for details) - the service always loads and requires all four integrations' variables, plus `MQTT_BROKER_URL`.
 
 ```
 PORT=8080
-TRMNL_TEXT_WEBHOOK_URL=
-TRMNL_IMAGE_WEBHOOK_URL=
+MQTT_BROKER_URL=
+MQTT_USERNAME=
+MQTT_PASSWORD=
+MQTT_TOPIC=spotify/current
 PUBLIC_BASE_URL=
 DATA_DIR=/data
 HOME_ASSISTANT_BASE_URL=
@@ -74,10 +79,6 @@ SPOTIFY_CLIENT_ID=
 SPOTIFY_CLIENT_SECRET=
 SPOTIFY_REDIRECT_URI=
 REDIS_URL=redis://redis:6379/0
-MQTT_BROKER_URL=
-MQTT_USERNAME=
-MQTT_PASSWORD=
-MQTT_TOPIC=spotify/current
 GITHUB_USERNAME=
 GITHUB_TOKEN=
 TRUSTED_PROXY_CIDRS=
@@ -85,8 +86,6 @@ CORS_ALLOWED_ORIGINS=
 ```
 
 `PUBLIC_BASE_URL` is only required if you plan to use the image-upload path of `/api/trmnl/image`; it's used to build the URL your uploaded image is served back at.
-
-`MQTT_BROKER_URL` is optional - spotify's current-track changes are always published to the Redis channel `spotify/current` regardless, but setting a broker URL (e.g. `tcp://mosquitto:1883`) additionally retains the same JSON on `MQTT_TOPIC`. Leave it blank to skip MQTT entirely; nothing else in the app requires a broker.
 
 `TRUSTED_PROXY_CIDRS` is a comma-separated list of CIDRs for reverse proxies you trust to set `X-Forwarded-For` (e.g. `10.0.0.0/8`). Leave blank if the service is reachable directly, with no reverse proxy in front.
 
@@ -98,7 +97,7 @@ CORS_ALLOWED_ORIGINS=
 docker compose up --build -d
 ```
 
-This builds the image and starts the container, plus a `redis` container (with AOF persistence in a named volume) that spotify stores its OAuth tokens in. trmnl's uploaded images persist to `./data`. By default the service listens on host port `8080`, with a healthcheck at `curl http://localhost:8080/healthz`.
+This builds the image and starts the container, plus a `redis` container (with AOF persistence in a named volume) that stores spotify's OAuth tokens, the github cache, and trmnl's pending-message queues. trmnl's uploaded images persist to `./data`. By default the service listens on host port `8080`, with a healthcheck at `curl http://localhost:8080/healthz`. `docker-compose.yml` doesn't bundle an MQTT broker - point `MQTT_BROKER_URL` at one you already run.
 
 You can also build the image directly with `docker build -t apis .`.
 
@@ -120,7 +119,7 @@ Prometheus metrics in text exposition format.
 {"text": "Hello world", "author": "optional"}
 ```
 
-Returns `202 Accepted` on success, `429` (with `Retry-After`) if rate limited.
+Publishes to mqtt for the queue consumer to pick up. Returns `202 Accepted` on success, `429` (with `Retry-After`) if rate limited.
 
 #### `POST /api/trmnl/image`
 
@@ -137,7 +136,15 @@ or:
 {"image_url": "https://example.com/my-image.png"}
 ```
 
-Returns `202 Accepted` on success, `429` (with `Retry-After`) if rate limited.
+Publishes to mqtt for the queue consumer to pick up. Returns `202 Accepted` on success, `429` (with `Retry-After`) if rate limited.
+
+#### `GET /api/trmnl/text` / `GET /api/trmnl/image`
+
+The URLs to configure as each plugin's Polling URL in TRMNL. Returns the current merge_variables as a flat JSON object, e.g. `{"text": "Hello world", "author": "optional"}` or `{"image_url": "https://..."}`:
+
+- More than one message queued: pops and returns the next one (drains a backlog one poll at a time).
+- Exactly one message queued: returns it again without removing it, so the display doesn't go blank between pushes.
+- Nothing ever pushed: returns `{}`.
 
 ### homeassistant
 
