@@ -51,16 +51,18 @@ func NewClient(battleTags []string, rdb *redis.Client) *Client {
 
 // Player is the trimmed-down view of a career profile served to clients.
 type Player struct {
-	BattleTag   string       `json:"battletag"`
-	Username    string       `json:"username"`
-	Title       string       `json:"title,omitempty"`
-	Avatar      string       `json:"avatar,omitempty"`
-	Namecard    string       `json:"namecard,omitempty"`
-	Endorsement int          `json:"endorsement,omitempty"`
-	Season      int          `json:"season,omitempty"`
-	Ranks       []Rank       `json:"ranks"`
-	Stats       *Stats       `json:"stats,omitempty"`
-	TopHeroes   []HeroPlayed `json:"top_heroes"`
+	BattleTag   string `json:"battletag"`
+	Username    string `json:"username"`
+	Title       string `json:"title,omitempty"`
+	Avatar      string `json:"avatar,omitempty"`
+	Namecard    string `json:"namecard,omitempty"`
+	Endorsement int    `json:"endorsement,omitempty"`
+	// EndorsementFrame is Blizzard's badge icon for the endorsement level.
+	EndorsementFrame string       `json:"endorsement_frame,omitempty"`
+	Season           int          `json:"season,omitempty"`
+	Ranks            []Rank       `json:"ranks"`
+	Stats            *Stats       `json:"stats,omitempty"`
+	TopHeroes        []HeroPlayed `json:"top_heroes"`
 }
 
 type Rank struct {
@@ -69,6 +71,7 @@ type Rank struct {
 	Tier     int    `json:"tier"`
 	RankIcon string `json:"rank_icon"`
 	RoleIcon string `json:"role_icon"`
+	TierIcon string `json:"tier_icon"`
 }
 
 type Stats struct {
@@ -108,6 +111,7 @@ type rankResponse struct {
 	Tier     int    `json:"tier"`
 	RoleIcon string `json:"role_icon"`
 	RankIcon string `json:"rank_icon"`
+	TierIcon string `json:"tier_icon"`
 }
 
 type platformRanks struct {
@@ -124,7 +128,8 @@ type summaryResponse struct {
 	Namecard    *string `json:"namecard"`
 	Title       *string `json:"title"`
 	Endorsement *struct {
-		Level int `json:"level"`
+		Level int    `json:"level"`
+		Frame string `json:"frame"`
 	} `json:"endorsement"`
 	Competitive *struct {
 		PC *platformRanks `json:"pc"`
@@ -163,6 +168,7 @@ func (c *Client) fetchPlayer(ctx context.Context, tag string) (*Player, error) {
 	}
 	if summary.Endorsement != nil {
 		p.Endorsement = summary.Endorsement.Level
+		p.EndorsementFrame = strings.TrimSuffix(summary.Endorsement.Frame, "#icon")
 	}
 	if summary.Competitive != nil && summary.Competitive.PC != nil {
 		pc := summary.Competitive.PC
@@ -176,7 +182,7 @@ func (c *Client) fetchPlayer(ctx context.Context, tag string) (*Player, error) {
 			if r.rank != nil {
 				p.Ranks = append(p.Ranks, Rank{
 					Role: r.role, Division: r.rank.Division, Tier: r.rank.Tier,
-					RankIcon: r.rank.RankIcon, RoleIcon: r.rank.RoleIcon,
+					RankIcon: r.rank.RankIcon, RoleIcon: r.rank.RoleIcon, TierIcon: r.rank.TierIcon,
 				})
 			}
 		}
