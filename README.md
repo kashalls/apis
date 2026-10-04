@@ -275,6 +275,7 @@ Both endpoints are cached in Redis for 30 minutes; a request only calls GitHub w
       "race": "Void Elf",
       "class": "Mage",
       "spec": "Frost",
+      "spec_icon": "https://render.worldofwarcraft.com/us/icons/56/...jpg",
       "faction": "Alliance",
       "guild": "Puddle",
       "item_level": 712,
@@ -287,7 +288,7 @@ Both endpoints are cached in Redis for 30 minutes; a request only calls GitHub w
 }
 ```
 
-`mythic_rating` is retail only and omitted without keystone runs; `media` fields are omitted when Blizzard doesn't provide them.
+`mythic_rating` and `spec_icon` are retail only, and `mythic_rating` is omitted without keystone runs; `media` fields are omitted when Blizzard doesn't provide them.
 
 ### overwatch
 
@@ -303,9 +304,10 @@ Both endpoints are cached in Redis for 30 minutes; a request only calls GitHub w
       "avatar": "https://...",
       "namecard": "https://...",
       "endorsement": 2,
+      "endorsement_frame": "https://static.playoverwatch.com/images/pages/career/icons/endorsement/2...svg",
       "season": 22,
       "ranks": [
-        {"role": "support", "division": "silver", "tier": 4, "rank_icon": "https://...", "role_icon": "https://..."}
+        {"role": "support", "division": "silver", "tier": 4, "rank_icon": "https://...", "role_icon": "https://...", "tier_icon": "https://..."}
       ],
       "stats": {"games_played": 12830, "games_won": 6601, "time_played": 5935880, "winrate": 51.45, "kda": 3.01},
       "top_heroes": [

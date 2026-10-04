@@ -89,6 +89,7 @@ type Character struct {
 	Race              string        `json:"race"`
 	Class             string        `json:"class"`
 	Spec              string        `json:"spec,omitempty"`
+	SpecIcon          string        `json:"spec_icon,omitempty"`
 	Faction           string        `json:"faction"`
 	Guild             string        `json:"guild,omitempty"`
 	ItemLevel         int           `json:"item_level"`
@@ -145,11 +146,14 @@ type nameRef struct {
 }
 
 type profileResponse struct {
-	Name              string  `json:"name"`
-	Level             int     `json:"level"`
-	Race              nameRef `json:"race"`
-	CharacterClass    nameRef `json:"character_class"`
-	ActiveSpec        nameRef `json:"active_spec"`
+	Name           string  `json:"name"`
+	Level          int     `json:"level"`
+	Race           nameRef `json:"race"`
+	CharacterClass nameRef `json:"character_class"`
+	ActiveSpec     struct {
+		Name string `json:"name"`
+		ID   int    `json:"id"`
+	} `json:"active_spec"`
 	Faction           nameRef `json:"faction"`
 	Guild             nameRef `json:"guild"`
 	Realm             nameRef `json:"realm"`
@@ -219,6 +223,18 @@ func (c *Client) fetchCharacter(ctx context.Context, ref CharacterRef) (*Charact
 	}
 
 	if ref.Flavor == "retail" {
+		var specMedia mediaResponse
+		if profile.ActiveSpec.ID > 0 {
+			path := fmt.Sprintf("/data/wow/media/playable-specialization/%d", profile.ActiveSpec.ID)
+			if err := c.get(ctx, path, "static-"+c.region, &specMedia); err == nil {
+				for _, a := range specMedia.Assets {
+					if a.Key == "icon" {
+						char.SpecIcon = a.Value
+					}
+				}
+			}
+		}
+
 		var mythic mythicResponse
 		if err := c.get(ctx, base+"/mythic-keystone-profile", ns, &mythic); err == nil && mythic.CurrentMythicRating != nil {
 			r := mythic.CurrentMythicRating
