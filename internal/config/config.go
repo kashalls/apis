@@ -19,6 +19,11 @@ type Config struct {
 	RedisURL                string   `env:"REDIS_URL,required,notEmpty"`
 	GitHubUsername          string   `env:"GITHUB_USERNAME,required,notEmpty"`
 	GitHubToken             string   `env:"GITHUB_TOKEN,required,notEmpty"`
+	BlizzardClientID        string   `env:"BLIZZARD_CLIENT_ID"`
+	BlizzardClientSecret    string   `env:"BLIZZARD_CLIENT_SECRET"`
+	BlizzardRegion          string   `env:"BLIZZARD_REGION" envDefault:"us"`
+	WoWCharacters           []string `env:"WOW_CHARACTERS"`
+	OverwatchBattleTags     []string `env:"OVERWATCH_BATTLETAGS"`
 	MQTTBrokerURL           string   `env:"MQTT_BROKER_URL"`
 	MQTTUsername            string   `env:"MQTT_USERNAME"`
 	MQTTPassword            string   `env:"MQTT_PASSWORD"`

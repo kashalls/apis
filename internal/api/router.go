@@ -13,8 +13,10 @@ import (
 
 	"github.com/kashalls/apis/internal/github"
 	"github.com/kashalls/apis/internal/homeassistant"
+	"github.com/kashalls/apis/internal/overwatch"
 	"github.com/kashalls/apis/internal/spotify"
 	"github.com/kashalls/apis/internal/trmnl"
+	"github.com/kashalls/apis/internal/wow"
 )
 
 type RouterConfig struct {
@@ -22,6 +24,8 @@ type RouterConfig struct {
 	HomeAssistant      *homeassistant.Handlers
 	Spotify            *spotify.Handlers
 	GitHub             *github.Handlers
+	WoW                *wow.Handlers
+	Overwatch          *overwatch.Handlers
 	TrustedProxyCIDRs  []string
 	CORSAllowedOrigins []string
 }
@@ -50,6 +54,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 		ar.Route("/homeassistant", cfg.HomeAssistant.Routes)
 		ar.Route("/spotify", cfg.Spotify.Routes)
 		ar.Route("/github", cfg.GitHub.Routes)
+		ar.Route("/wow", cfg.WoW.Routes)
+		ar.Route("/overwatch", cfg.Overwatch.Routes)
 	})
 
 	return r
