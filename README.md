@@ -12,6 +12,10 @@ that bundles four integrations, each under its own path prefix:
   setup.
 - **github** (`/api/github`) - endpoints to read a GitHub account's
   pinned repositories and contribution calendar.
+- **wow** (`/api/wow`) - an endpoint to read World of Warcraft character
+  summaries (retail and classic) from the Blizzard Profile API.
+- **overwatch** (`/api/overwatch`) - an endpoint to read Overwatch career
+  summaries via [OverFast](https://overfast-api.tekrop.fr).
 
 > The Discord/Lanyard presence service that used to live here has moved to [kashalls/juno](https://github.com/kashalls/juno).
 
@@ -57,6 +61,15 @@ Create **two** private plugins in the TRMNL dashboard, so text and image pushes 
 1. Set `GITHUB_USERNAME` to the account whose pinned repositories you want `/api/github/pinned` to show.
 2. Create a personal access token (classic or fine-grained; no special scopes are needed to read public pins/contributions) and copy it into `GITHUB_TOKEN`. `/api/github/contributions` always reflects this token's own account.
 
+### World of Warcraft (wow)
+
+1. Create a client at the [Blizzard developer portal](https://develop.battle.net/access/clients) and copy its ID and secret into `BLIZZARD_CLIENT_ID` / `BLIZZARD_CLIENT_SECRET`. The client-credentials token is cached in Redis (`wow/access_token`).
+2. List characters in `WOW_CHARACTERS` as `flavor/realm-slug/name`, e.g. `retail/area-52/kash,classicann/dreamscythe/kash`. Each is cached for 30 minutes (`cache/wow/character/...`); one that fails to load is logged and left out.
+
+### Overwatch (overwatch)
+
+Blizzard has no official Overwatch API, so this reads [OverFast](https://overfast-api.tekrop.fr), which scrapes public career pages. Set `OVERWATCH_BATTLETAGS` and make sure the in-game career profile is public, or ranks and stats come back empty. Each player is cached for 30 minutes.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and fill in the values (see comments in that file for details) - the service always loads and requires all four integrations' variables.
@@ -80,6 +93,11 @@ MQTT_PASSWORD=
 MQTT_TOPIC=spotify/current
 GITHUB_USERNAME=
 GITHUB_TOKEN=
+BLIZZARD_CLIENT_ID=
+BLIZZARD_CLIENT_SECRET=
+BLIZZARD_REGION=us
+WOW_CHARACTERS=
+OVERWATCH_BATTLETAGS=
 TRUSTED_PROXY_CIDRS=
 CORS_ALLOWED_ORIGINS=
 ```
@@ -241,3 +259,61 @@ Both endpoints are cached in Redis for 30 minutes; a request only calls GitHub w
   "total_contributions": 842
 }
 ```
+
+### wow
+
+#### `GET /api/wow/characters`
+
+```json
+{
+  "characters": [
+    {
+      "flavor": "retail",
+      "name": "Kash",
+      "realm": "Area 52",
+      "level": 90,
+      "race": "Void Elf",
+      "class": "Mage",
+      "spec": "Frost",
+      "faction": "Alliance",
+      "guild": "Puddle",
+      "item_level": 712,
+      "achievement_points": 15000,
+      "last_login": 1791000000000,
+      "mythic_rating": {"rating": 2512.4, "color": "#ff8000"},
+      "media": {"avatar": "https://...", "inset": "https://...", "main": "https://..."}
+    }
+  ]
+}
+```
+
+`mythic_rating` is retail only and omitted without keystone runs; `media` fields are omitted when Blizzard doesn't provide them.
+
+### overwatch
+
+#### `GET /api/overwatch/players`
+
+```json
+{
+  "players": [
+    {
+      "battletag": "TeKrop-2217",
+      "username": "TeKrop",
+      "title": "Data Broker",
+      "avatar": "https://...",
+      "namecard": "https://...",
+      "endorsement": 2,
+      "season": 22,
+      "ranks": [
+        {"role": "support", "division": "silver", "tier": 4, "rank_icon": "https://...", "role_icon": "https://..."}
+      ],
+      "stats": {"games_played": 12830, "games_won": 6601, "time_played": 5935880, "winrate": 51.45, "kda": 3.01},
+      "top_heroes": [
+        {"hero": "reinhardt", "time_played": 1336548, "winrate": 53.65}
+      ]
+    }
+  ]
+}
+```
+
+`stats` is PC only and omitted for private profiles; `time_played` is in seconds.

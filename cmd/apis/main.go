@@ -16,10 +16,12 @@ import (
 	"github.com/kashalls/apis/internal/github"
 	"github.com/kashalls/apis/internal/homeassistant"
 	"github.com/kashalls/apis/internal/mqtt"
+	"github.com/kashalls/apis/internal/overwatch"
 	"github.com/kashalls/apis/internal/ratelimit"
 	"github.com/kashalls/apis/internal/redisconn"
 	"github.com/kashalls/apis/internal/spotify"
 	"github.com/kashalls/apis/internal/trmnl"
+	"github.com/kashalls/apis/internal/wow"
 )
 
 const (
@@ -91,11 +93,22 @@ func run() error {
 	githubClient := github.NewClient(cfg.GitHubUsername, cfg.GitHubToken, rdb)
 	githubHandlers := github.NewHandlers(githubClient)
 
+	wowCharacters, err := wow.ParseCharacterRefs(cfg.WoWCharacters)
+	if err != nil {
+		return err
+	}
+	wowClient := wow.NewClient(cfg.BlizzardClientID, cfg.BlizzardClientSecret, cfg.BlizzardRegion, wowCharacters, rdb)
+	wowHandlers := wow.NewHandlers(wowClient)
+
+	overwatchHandlers := overwatch.NewHandlers(overwatch.NewClient(cfg.OverwatchBattleTags, rdb))
+
 	router := api.NewRouter(api.RouterConfig{
 		TRMNL:              trmnlHandlers,
 		HomeAssistant:      haHandlers,
 		Spotify:            spotifyHandlers,
 		GitHub:             githubHandlers,
+		WoW:                wowHandlers,
+		Overwatch:          overwatchHandlers,
 		TrustedProxyCIDRs:  cfg.TrustedProxyCIDRs,
 		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
 	})
