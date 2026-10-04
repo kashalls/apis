@@ -281,7 +281,7 @@ Both endpoints are cached in Redis for 30 minutes; a request only calls GitHub w
       "achievement_points": 15000,
       "last_login": 1791000000000,
       "mythic_rating": {"rating": 2512.4, "color": "#ff8000"},
-      "media": {"avatar": "https://...", "inset": "https://...", "main": "https://..."}
+      "media": {"avatar": "https://...", "inset": "https://...", "main": "https://...", "main_raw": "https://..."}
     }
   ]
 }

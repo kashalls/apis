@@ -109,6 +109,9 @@ type Media struct {
 	Avatar string `json:"avatar,omitempty"`
 	Inset  string `json:"inset,omitempty"`
 	Main   string `json:"main,omitempty"`
+	// MainRaw is the transparent full-body render, for characters whose
+	// "main" scene render isn't available.
+	MainRaw string `json:"main_raw,omitempty"`
 }
 
 // Characters returns every configured character that could be fetched,
@@ -209,6 +212,8 @@ func (c *Client) fetchCharacter(ctx context.Context, ref CharacterRef) (*Charact
 				char.Media.Inset = a.Value
 			case "main":
 				char.Media.Main = a.Value
+			case "main-raw":
+				char.Media.MainRaw = a.Value
 			}
 		}
 	}
